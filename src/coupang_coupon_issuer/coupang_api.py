@@ -130,8 +130,7 @@ class CoupangAPIClient:
         discount: int,
         start_at: str,
         end_at: str,
-        coupon_type: str = "PRICE",
-        wow_exclusive: bool = False
+        coupon_type: str = "PRICE"
     ) -> Dict[str, Any]:
         """
         즉시할인쿠폰 생성
@@ -145,7 +144,6 @@ class CoupangAPIClient:
             start_at: 유효 시작일 (YYYY-MM-DD HH:MM:SS)
             end_at: 유효 종료일 (YYYY-MM-DD HH:MM:SS)
             coupon_type: 할인 방식 (RATE/FIXED_WITH_QUANTITY/PRICE)
-            wow_exclusive: 로켓와우 회원 전용 (기본값: False)
 
         Returns:
             API 응답 데이터 (requestedId 포함)
@@ -159,8 +157,7 @@ class CoupangAPIClient:
             "discount": str(discount),
             "startAt": start_at,
             "endAt": end_at,
-            "type": coupon_type,
-            "wowExclusive": str(wow_exclusive).lower()
+            "type": coupon_type
         }
 
         return self._request("POST", path, json_data=payload)
