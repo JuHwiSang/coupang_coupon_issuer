@@ -6,13 +6,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
-from openpyxl import load_workbook, Workbook
-from openpyxl.styles import Font, Alignment
+from openpyxl import load_workbook
 
 from .coupang_api import CoupangAPIClient
 from .config import (
     EXCEL_INPUT_FILE,
-    EXCEL_RESULT_DIR,
     COUPON_MAX_DISCOUNT,
     COUPON_CONTRACT_ID,
 )
@@ -62,7 +60,7 @@ class CouponIssuer:
 
         1. 엑셀에서 쿠폰 정의 읽기
         2. 각 쿠폰에 대해 Coupang API 호출
-        3. 결과를 엑셀로 저장
+        3. 결과를 로그로 출력
         """
         timestamp = self._timestamp()
         print(f"[{timestamp}] 쿠폰 발급 작업 시작", flush=True)
@@ -84,25 +82,19 @@ class CouponIssuer:
                 result = self._issue_single_coupon(idx, coupon)
                 results.append(result)
 
-            # 3. 결과 저장
-            self._save_result(results)
-
-            # 4. 요약 출력
+            # 3. 결과 요약 출력
             success_count = sum(1 for r in results if r['status'] == '성공')
             fail_count = len(results) - success_count
 
             print(f"[{timestamp}] 쿠폰 발급 완료! (성공: {success_count}, 실패: {fail_count})", flush=True)
 
+            # 4. 상세 결과 로깅
+            for result in results:
+                status = "OK" if result['status'] == '성공' else "FAIL"
+                print(f"[{timestamp}] [{status}] {result['coupon_name']}: {result['message']}", flush=True)
+
         except Exception as e:
             print(f"[{timestamp}] ERROR: 쿠폰 발급 중 오류 발생: {e}", flush=True)
-
-            # 에러 발생 시에도 지금까지의 결과는 저장
-            if results:
-                try:
-                    self._save_result(results)
-                except Exception as save_error:
-                    print(f"[{timestamp}] ERROR: 결과 저장 실패: {save_error}", flush=True)
-
             raise
 
     def _issue_single_coupon(self, index: int, coupon: Dict[str, Any]) -> Dict[str, Any]:
@@ -218,7 +210,7 @@ class CouponIssuer:
             FileNotFoundError: 엑셀 파일이 없는 경우
             ValueError: 엑셀 형식이 잘못된 경우
         """
-        excel_path = Path(__file__).parent / EXCEL_INPUT_FILE
+        excel_path = EXCEL_INPUT_FILE  # 이미 Path 객체 (/etc/coupang_coupon_issuer/coupons.xlsx)
 
         if not excel_path.exists():
             raise FileNotFoundError(f"엑셀 파일이 없습니다: {excel_path}")
@@ -304,6 +296,18 @@ class CouponIssuer:
                 except (ValueError, TypeError):
                     raise ValueError(f"행 {row_idx}: 발급개수는 숫자여야 합니다 (현재값: {issue_count_raw})")
 
+                # 6. 할인방식별 추가 검증
+                if discount_type == 'RATE':
+                    # 정률할인: 1~99% 범위 체크
+                    if not (1 <= issue_count <= 99):
+                        raise ValueError(f"행 {row_idx}: RATE 할인율은 1~99 사이여야 합니다 (현재: {issue_count})")
+                elif discount_type == 'PRICE':
+                    # 정액할인: 10원 단위 및 최소 10원 체크
+                    if issue_count < 10:
+                        raise ValueError(f"행 {row_idx}: PRICE 할인금액은 최소 10원 이상이어야 합니다 (현재: {issue_count})")
+                    if issue_count % 10 != 0:
+                        raise ValueError(f"행 {row_idx}: PRICE 할인금액은 10원 단위여야 합니다 (현재: {issue_count})")
+
                 coupon = {
                     'name': coupon_name,
                     'type': coupon_type,
@@ -321,88 +325,4 @@ class CouponIssuer:
 
         except Exception as e:
             print(f"[{timestamp}] ERROR: 엑셀 파일 읽기 실패: {e}", flush=True)
-            raise
-
-    def _save_result(self, results: List[Dict[str, Any]]) -> None:
-        """
-        발급 결과를 엑셀 파일로 저장
-
-        Args:
-            results: 발급 결과 리스트
-                [
-                    {
-                        "coupon_name": "쿠폰명",
-                        "coupon_type": "즉시할인",
-                        "status": "성공" or "실패",
-                        "message": "성공 메시지 또는 에러 메시지",
-                        "timestamp": "2024-12-14 12:34:56"
-                    },
-                    ...
-                ]
-
-        Raises:
-            Exception: 파일 저장 실패
-        """
-        timestamp = self._timestamp()
-
-        # 결과 디렉토리 생성
-        result_dir = Path(__file__).parent / EXCEL_RESULT_DIR
-        result_dir.mkdir(exist_ok=True)
-
-        # 결과 파일명 (타임스탬프 포함)
-        filename = f"result_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-        result_path = result_dir / filename
-
-        print(f"[{timestamp}] 결과 저장 중: {result_path}", flush=True)
-
-        try:
-            workbook = Workbook()
-            sheet = workbook.active
-
-            if sheet is None:
-                raise ValueError("엑셀 시트를 생성할 수 없습니다")
-
-            sheet.title = "발급 결과"
-
-            # 헤더 작성
-            headers = ["쿠폰명", "쿠폰 타입", "상태", "메시지", "처리 시각"]
-            sheet.append(headers)
-
-            # 헤더 스타일 적용
-            for cell in sheet[1]:  # type: ignore
-                cell.font = Font(bold=True)  # type: ignore
-                cell.alignment = Alignment(horizontal='center')  # type: ignore
-
-            # 데이터 행 작성
-            for result in results:
-                row = [
-                    result.get('coupon_name', ''),
-                    result.get('coupon_type', ''),
-                    result.get('status', ''),
-                    result.get('message', ''),
-                    result.get('timestamp', '')
-                ]
-                sheet.append(row)
-
-            # 컬럼 너비 자동 조정
-            for column in sheet.columns:  # type: ignore
-                max_length = 0
-                column_letter = column[0].column_letter  # type: ignore
-                for cell in column:
-                    try:
-                        if cell.value:  # type: ignore
-                            max_length = max(max_length, len(str(cell.value)))  # type: ignore
-                    except:
-                        pass
-                adjusted_width = min(max_length + 2, 50)
-                sheet.column_dimensions[column_letter].width = adjusted_width  # type: ignore
-
-            # 파일 저장
-            workbook.save(result_path)
-            workbook.close()
-
-            print(f"[{timestamp}] 결과 저장 완료: {len(results)}건", flush=True)
-
-        except Exception as e:
-            print(f"[{timestamp}] ERROR: 결과 저장 실패: {e}", flush=True)
             raise

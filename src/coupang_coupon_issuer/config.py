@@ -15,7 +15,7 @@ CONFIG_DIR = Path("/etc") / SERVICE_NAME
 CONFIG_FILE = CONFIG_DIR / "credentials.json"
 
 # 엑셀 파일 경로
-EXCEL_INPUT_FILE = "coupons.xlsx"  # 발급할 쿠폰 목록
+EXCEL_INPUT_FILE = Path("/etc") / SERVICE_NAME / "coupons.xlsx"  # 발급할 쿠폰 목록
 EXCEL_RESULT_DIR = "results"  # 결과 저장 디렉토리
 
 # 쿠폰 발급 고정값
