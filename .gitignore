@@ -51,6 +51,7 @@ credentials.json
 # Test
 .pytest_cache/
 .coverage
+coverage.*
 htmlcov/
 .tox/
 

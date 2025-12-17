@@ -100,3 +100,18 @@
   - 명령어: `/sbin/init`
 - **부팅 대기**: systemd 초기화를 위해 약 5초 대기 필요
 - **사용 목적**: Windows 개발 환경에서 Linux systemd 테스트
+
+### 테스트 규칙
+- **Python 실행**: `uv run python` 또는 `uv run pytest` 사용
+- **테스트 실행**: `uv run pytest tests/unit -v`
+- **커버리지**: `uv run pytest --cov=src/coupang_coupon_issuer`
+- **플랫폼 스킵**: Windows 전용 스킵은 `pytestmark = pytest.mark.skipif(os.name == 'nt', ...)` 사용
+- **Mock 라이브러리**:
+  - HTTP API: `requests-mock`
+  - 시간: `freezegun`
+  - 일반: `pytest-mock` (mocker fixture)
+- **Fixture 파일**: `tests/fixtures/` 디렉토리에 테스트용 엑셀 파일 관리
+- **테스트 마커**:
+  - `@pytest.mark.unit`: 유닛 테스트
+  - `@pytest.mark.integration`: 통합 테스트 (Docker 필요)
+  - `@pytest.mark.slow`: 느린 테스트 (> 1초)

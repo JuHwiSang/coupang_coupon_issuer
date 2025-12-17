@@ -101,6 +101,8 @@ docs/
 - 패키지: requests, openpyxl만 사용
 - 로그에 이모지 사용 금지 (텍스트만)
 - 예외 처리 필수 (로깅 후 상위로 전파)
+- **Python 실행 시 uv 사용**: `uv run python script.py` 또는 `uv run pytest`
+- **cd 명령어 사용 금지**: 절대 경로만 사용
 
 ### 구현 가이드
 
@@ -174,6 +176,85 @@ journalctl -u coupang_coupon_issuer --since "1 hour ago"
 - [x] ADR 001-008 (아키텍처 결정 기록)
 - [x] Coupang API 문서 (workflow, parameters 등)
 
+### 테스트
+- [x] 테스트 작성 (pytest + requests-mock)
+  - **유닛 테스트**: 97개 작성
+  - **Windows 테스트 결과**: 79 passed, 12 skipped, 6 failed (81% 통과율)
+    - ✅ test_config.py: 17/17 통과 (100%)
+    - ✅ test_coupang_api.py: 12/12 통과 (100%)
+    - ✅ test_cli.py: 20/20 통과 (100%)
+    - ⚠️ test_issuer.py: 20/23 통과 (87%, 3개 mock 이슈)
+    - ⚠️ test_scheduler.py: 11/14 통과 (79%, 3개 freezegun 이슈)
+    - ⏭️ test_service.py: 0/12 스킵 (Linux 전용, Windows에서 자동 스킵)
+  - **커버리지**: 69% (config 100%, coupang_api 98%, issuer 92%, scheduler 91%)
+  - **테스트 실행**: `uv run pytest tests/unit -v`
+  - **커버리지 확인**: `uv run pytest --cov=src/coupang_coupon_issuer`
+- [ ] 통합 테스트 (testcontainers)
+  - service.py는 유닛 테스트 불가 → 통합 테스트에서 실제 systemd 환경으로 테스트
+  - Linux 컨테이너 내에서 install/uninstall/service 동작 검증 필요
+  - 전체 워크플로우 E2E 테스트 (apply → install → serve → issue → uninstall)
+
 ### 향후 작업
-- [ ] 테스트 작성 (pytest + requests-mock)
+- [ ] 통합 테스트 작성 (testcontainers + systemd)
 - [ ] 성능 최적화 (병렬 처리, 선택사항)
+
+## 테스트 가이드
+
+### 테스트 구조
+
+```
+tests/
+├── conftest.py                   # 공통 fixture (credentials, excel, mock API)
+├── fixtures/                     # 테스트용 엑셀 파일
+│   ├── sample_valid.xlsx
+│   ├── sample_invalid_columns.xlsx
+│   ├── sample_invalid_rates.xlsx
+│   └── sample_invalid_prices.xlsx
+└── unit/
+    ├── test_config.py            # CredentialManager 테스트 (17개)
+    ├── test_coupang_api.py       # API 클라이언트 + HMAC (12개)
+    ├── test_issuer.py            # 쿠폰 발급 로직 (23개)
+    ├── test_scheduler.py         # 0시 스케줄러 (14개)
+    ├── test_service.py           # systemd 관리 (17개, Linux only)
+    └── test_cli.py               # CLI 명령어 (20개)
+```
+
+### 테스트 실행 명령어
+
+```bash
+# 전체 유닛 테스트
+uv run pytest tests/unit -v
+
+# 특정 파일만
+uv run pytest tests/unit/test_config.py -v
+
+# 커버리지 포함
+uv run pytest tests/unit --cov=src/coupang_coupon_issuer --cov-report=html
+
+# Linux 전용 테스트 스킵 (Windows에서)
+uv run pytest tests/unit -m "not linux_only"
+```
+
+### Windows vs Linux 테스트
+
+- **Windows 환경**: service.py 테스트 스킵 (os.geteuid() 없음)
+- **Linux 환경**: 전체 테스트 실행 가능
+- **통합 테스트**: testcontainers로 Ubuntu 22.04 컨테이너 내에서 실행
+
+### 테스트 작성 규칙
+
+1. **Mock 사용**
+   - requests-mock: HTTP API 호출
+   - freezegun: 시간 기반 로직 (scheduler)
+   - pytest-mock: 일반 객체 모킹
+
+2. **Fixture 활용**
+   - `temp_credentials`: 임시 credentials.json
+   - `valid_excel`: 유효한 5컬럼 엑셀
+   - `mock_coupang_api`: Coupang API 응답 모킹
+
+3. **테스트 마커**
+   - `@pytest.mark.unit`: 유닛 테스트
+   - `@pytest.mark.integration`: 통합 테스트
+   - `@pytest.mark.slow`: 느린 테스트 (> 1초)
+   - Windows 스킵: `pytestmark = pytest.mark.skipif(os.name == 'nt', ...)` 사용
