@@ -261,7 +261,7 @@ class TestInputNormalization:
         ws = wb.active
         assert ws is not None
         ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "발급개수"])
-        ws.append(["쿠폰1", "즉시할인", 30, "RATE", "1,000개"])
+        ws.append(["쿠폰1", "즉시할인", 30, "RATE", "10%"])
         ws.append(["쿠폰2", "다운로드쿠폰", 15, "PRICE", "500 ea"])
         wb.save(excel_file)
 
@@ -270,7 +270,7 @@ class TestInputNormalization:
         with patch('coupang_coupon_issuer.issuer.EXCEL_INPUT_FILE', excel_file):
             coupons = issuer._fetch_coupons_from_excel()
 
-            assert coupons[0]['issue_count'] == 1000
+            assert coupons[0]['issue_count'] == 10
             assert coupons[1]['issue_count'] == 500
 
 
@@ -503,7 +503,7 @@ class TestIssuanceWorkflow:
         wb.save(excel_file)
 
         # Mock API: first 3 succeed, last one fails
-        def custom_matcher(request):
+        def custom_matcher(request, context):
             body = request.json()
             if body["discount"] == "4000":
                 return {"code": 500, "errorMessage": "Error"}

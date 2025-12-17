@@ -290,9 +290,7 @@ class CouponIssuer:
                 issue_count_raw = str(row[col_indices['발급개수']])
                 issue_count_digits = re.sub(r'[^\d.]', '', issue_count_raw)  # 숫자와 소수점만 남김
                 try:
-                    issue_count = int(float(issue_count_digits))
-                    if issue_count <= 0:
-                        raise ValueError(f"행 {row_idx}: 발급개수는 1 이상이어야 합니다")
+                    issue_count = int(float(issue_count_digits)) if issue_count_digits else 0
                 except (ValueError, TypeError):
                     raise ValueError(f"행 {row_idx}: 발급개수는 숫자여야 합니다 (현재값: {issue_count_raw})")
 
@@ -307,6 +305,10 @@ class CouponIssuer:
                         raise ValueError(f"행 {row_idx}: PRICE 할인금액은 최소 10원 이상이어야 합니다 (현재: {issue_count})")
                     if issue_count % 10 != 0:
                         raise ValueError(f"행 {row_idx}: PRICE 할인금액은 10원 단위여야 합니다 (현재: {issue_count})")
+                elif discount_type == 'FIXED_WITH_QUANTITY':
+                    # 수량할인: 1 이상 체크
+                    if issue_count <= 0:
+                        raise ValueError(f"행 {row_idx}: FIXED_WITH_QUANTITY 발급개수는 1 이상이어야 합니다 (현재: {issue_count})")
 
                 coupon = {
                     'name': coupon_name,

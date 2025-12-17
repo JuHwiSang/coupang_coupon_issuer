@@ -73,18 +73,20 @@ class TestDuplicateExecutionPrevention:
         task_mock = mocker.Mock()
         scheduler = MidnightScheduler(task_mock)
 
-        # Simulate time progression within the same day
-        times = [
-            datetime(2024, 12, 17, 0, 0, 0),  # First check: midnight
-            datetime(2024, 12, 17, 0, 0, 30),  # Second check: still 00:00 range, same day
-            datetime(2024, 12, 18, 0, 0, 0),   # Third check: next day midnight
-        ]
+        # Use itertools.cycle to avoid StopIteration
+        from itertools import cycle
+        times_cycle = cycle([
+            datetime(2024, 12, 17, 0, 0, 0),  # Loop 1: midnight day 1
+            datetime(2024, 12, 17, 0, 0, 30),  # Loop 2: still day 1
+            datetime(2024, 12, 18, 0, 0, 0),  # Loop 3: midnight day 2
+        ])
 
         with patch('coupang_coupon_issuer.scheduler.datetime') as mock_datetime:
-            mock_datetime.now.side_effect = times
+            mock_datetime.now.side_effect = lambda: next(times_cycle)
             mock_datetime.side_effect = lambda *args, **kw: datetime(*args, **kw)  # Allow datetime() calls
 
-            sleep_mock = mocker.patch('time.sleep', side_effect=[None, None, KeyboardInterrupt()])
+            # Need 3 sleeps: after loop1, after loop2, after loop3 (KeyboardInterrupt)
+            sleep_mock = mocker.patch('time.sleep', side_effect=[None, None, None, KeyboardInterrupt()])
 
             try:
                 scheduler.run()
@@ -106,10 +108,17 @@ class TestLogging:
         scheduler = MidnightScheduler(task_mock)
 
         # Simulate hourly progression
+        # Each loop needs: now + _timestamp() calls for logging
         times = [
-            datetime(2024, 12, 17, 15, 0, 0),   # 15:00 (minute=00, log expected)
-            datetime(2024, 12, 17, 16, 0, 0),   # 16:00 (minute=00, log expected)
-            datetime(2024, 12, 17, 17, 0, 0),   # 17:00 (minute=00, log expected)
+            # Loop 1: 15:00
+            datetime(2024, 12, 17, 15, 0, 0),   # now = datetime.now()
+            datetime(2024, 12, 17, 15, 0, 0),   # _timestamp() in _log_waiting_status
+            # Loop 2: 16:00
+            datetime(2024, 12, 17, 16, 0, 0),   # now = datetime.now()
+            datetime(2024, 12, 17, 16, 0, 0),   # _timestamp() in _log_waiting_status
+            # Loop 3: 17:00
+            datetime(2024, 12, 17, 17, 0, 0),   # now = datetime.now()
+            datetime(2024, 12, 17, 17, 0, 0),   # _timestamp() in _log_waiting_status
         ]
 
         with patch('coupang_coupon_issuer.scheduler.datetime') as mock_datetime:
@@ -163,18 +172,19 @@ class TestErrorHandling:
         task_mock = mocker.Mock(side_effect=[Exception("Task failed"), None])
         scheduler = MidnightScheduler(task_mock)
 
-        # First run: midnight on day 1 (task fails)
-        # Second run: midnight on day 2 (task succeeds)
-        times = [
-            datetime(2024, 12, 17, 0, 0, 0),  # Day 1 midnight
-            datetime(2024, 12, 18, 0, 0, 0),  # Day 2 midnight
-        ]
+        # Use itertools.cycle to avoid StopIteration
+        from itertools import cycle
+        times_cycle = cycle([
+            datetime(2024, 12, 17, 0, 0, 0),  # Loop 1: midnight day 1 (task fails)
+            datetime(2024, 12, 18, 0, 0, 0),  # Loop 2: midnight day 2 (task succeeds)
+        ])
 
         with patch('coupang_coupon_issuer.scheduler.datetime') as mock_datetime:
-            mock_datetime.now.side_effect = times
+            mock_datetime.now.side_effect = lambda: next(times_cycle)
             mock_datetime.side_effect = lambda *args, **kw: datetime(*args, **kw)
 
-            sleep_mock = mocker.patch('time.sleep', side_effect=[None, KeyboardInterrupt()])
+            # Need 2 sleeps: after loop1, after loop2 (KeyboardInterrupt)
+            sleep_mock = mocker.patch('time.sleep', side_effect=[None, None, KeyboardInterrupt()])
 
             try:
                 scheduler.run()
