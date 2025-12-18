@@ -23,7 +23,7 @@
 **위치**: `docs/adr/NNN-title.md`
 
 현재 ADR 목록:
-- [ADR 001: 엑셀 입력 구조](docs/adr/001-excel-structure.md) - 5개 컬럼 구조, 파일 위치, 고정값
+- [ADR 001: 엑셀 입력 구조](docs/adr/001-excel-structure.md) - ~~5개 컬럼 구조~~ (대체됨, ADR 009 참조)
 - [ADR 002: 입력 정규화](docs/adr/002-input-normalization.md) - 사용자 입력 오류 용인 로직
 - [ADR 003: API 인증](docs/adr/003-api-authentication.md) - HMAC-SHA256 서명 생성
 - [ADR 004: 고정 설정값](docs/adr/004-fixed-configuration-values.md) - contract_id, 예산 등
@@ -31,6 +31,7 @@
 - [ADR 006: contract_id=-1 무료 예산](docs/adr/006-contract-id-negative-one.md) - 무료 예산 사용
 - [ADR 007: 쿠폰 발급 워크플로우](docs/adr/007-coupon-issuance-workflow.md) - 다단계 비동기 처리
 - [ADR 008: CLI 구조 재설계](docs/adr/008-cli-restructuring.md) - 5개 명령어, 전역 명령어, 로그 중심 운영
+- [ADR 009: 엑셀 6컬럼 구조](docs/adr/009-excel-6-column-structure.md) - 할인금액/비율과 발급개수 분리
 
 ### 📝 문서 작성 규칙
 
@@ -78,14 +79,15 @@
 docs/
 ├── DEV_LOG.md                       # 작은 결정사항, 관례
 ├── adr/                             # 아키텍처 결정 기록
-│   ├── 001-excel-structure.md
+│   ├── 001-excel-structure.md      # (대체됨)
 │   ├── 002-input-normalization.md
 │   ├── 003-api-authentication.md
 │   ├── 004-fixed-configuration-values.md
 │   ├── 005-systemd-service.md
 │   ├── 006-contract-id-negative-one.md
 │   ├── 007-coupon-issuance-workflow.md
-│   └── 008-cli-restructuring.md
+│   ├── 008-cli-restructuring.md
+│   └── 009-excel-6-column-structure.md  # 현재 사용
 └── coupang/                         # Coupang API 규격 문서
     ├── workflow.md
     ├── parameters-explained.md

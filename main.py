@@ -43,7 +43,7 @@ def cmd_apply(args) -> None:
 
         # 헤더 확인
         headers = [cell.value for cell in sheet[1]]
-        required = ['쿠폰이름', '쿠폰타입', '쿠폰유효기간', '할인방식', '발급개수']
+        required = ['쿠폰이름', '쿠폰타입', '쿠폰유효기간', '할인방식', '할인금액/비율', '발급개수']
 
         for col in required:
             if col not in headers:
@@ -92,25 +92,48 @@ def cmd_apply(args) -> None:
             else:
                 raise ValueError(f"행 {row_idx}: 잘못된 할인방식 '{discount_type_raw}' (RATE/FIXED_WITH_QUANTITY/PRICE만 가능)")
 
-            # 5. 발급개수 검증
-            issue_count_raw = str(row[col_indices['발급개수']])
-            issue_count_digits = re.sub(r'[^\d.]', '', issue_count_raw)
+            # 5. 할인금액/비율 검증 (Column E - 필수)
+            discount_raw = str(row[col_indices['할인금액/비율']])
+            discount_digits = re.sub(r'[^\d.]', '', discount_raw)
             try:
-                issue_count = int(float(issue_count_digits))
-                if issue_count <= 0:
-                    raise ValueError(f"행 {row_idx}: 발급개수는 1 이상이어야 합니다")
+                discount = int(float(discount_digits)) if discount_digits else 0
+                if discount <= 0:
+                    raise ValueError(f"행 {row_idx}: 할인금액/비율은 0보다 커야 합니다")
             except (ValueError, TypeError):
-                raise ValueError(f"행 {row_idx}: 발급개수는 숫자여야 합니다 (현재값: {issue_count_raw})")
+                raise ValueError(f"행 {row_idx}: 할인금액/비율은 숫자여야 합니다 (현재값: {discount_raw})")
 
-            # 6. 할인방식별 추가 검증
+            # 6. 발급개수 검증 (Column F - 선택적, 쿠폰 타입에 따라 다름)
+            coupon_type_normalized = re.sub(r'\s+', '', coupon_type_raw)
+            if '즉시할인' in coupon_type_normalized:
+                coupon_type = '즉시할인'
+            else:
+                coupon_type = '다운로드쿠폰'
+
+            issue_count_raw = str(row[col_indices['발급개수']]).strip()
+
+            # 다운로드쿠폰인 경우, 발급개수 검증 (비어있으면 기본값 1 사용 예정)
+            if coupon_type == '다운로드쿠폰':
+                if issue_count_raw and issue_count_raw != 'None':
+                    issue_count_digits = re.sub(r'[^\d.]', '', issue_count_raw)
+                    try:
+                        issue_count = int(float(issue_count_digits)) if issue_count_digits else 1
+                        if issue_count < 1:
+                            raise ValueError(f"행 {row_idx}: 발급개수는 1 이상이어야 합니다 (현재: {issue_count})")
+                    except (ValueError, TypeError):
+                        raise ValueError(f"행 {row_idx}: 발급개수는 숫자여야 합니다 (현재값: {issue_count_raw})")
+
+            # 7. 할인방식별 추가 검증 (Column E 기준)
             if discount_type == 'RATE':
-                if not (1 <= issue_count <= 99):
-                    raise ValueError(f"행 {row_idx}: RATE 할인율은 1~99 사이여야 합니다 (현재: {issue_count})")
+                if not (1 <= discount <= 99):
+                    raise ValueError(f"행 {row_idx}: RATE 할인율은 1~99 사이여야 합니다 (현재: {discount})")
             elif discount_type == 'PRICE':
-                if issue_count < 10:
-                    raise ValueError(f"행 {row_idx}: PRICE 할인금액은 최소 10원 이상이어야 합니다 (현재: {issue_count})")
-                if issue_count % 10 != 0:
-                    raise ValueError(f"행 {row_idx}: PRICE 할인금액은 10원 단위여야 합니다 (현재: {issue_count})")
+                if discount < 10:
+                    raise ValueError(f"행 {row_idx}: PRICE 할인금액은 최소 10원 이상이어야 합니다 (현재: {discount})")
+                if discount % 10 != 0:
+                    raise ValueError(f"행 {row_idx}: PRICE 할인금액은 10원 단위여야 합니다 (현재: {discount})")
+            elif discount_type == 'FIXED_WITH_QUANTITY':
+                if discount < 1:
+                    raise ValueError(f"행 {row_idx}: FIXED_WITH_QUANTITY 할인은 1 이상이어야 합니다 (현재: {discount})")
 
         wb.close()
         print("검증 완료", flush=True)

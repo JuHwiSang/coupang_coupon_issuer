@@ -21,6 +21,7 @@ EXCEL_RESULT_DIR = "results"  # 결과 저장 디렉토리
 # 쿠폰 발급 고정값
 COUPON_MAX_DISCOUNT = 100000  # 최대 할인금액 (10만원)
 COUPON_CONTRACT_ID = -1  # 계약서 ID 고정값
+COUPON_DEFAULT_ISSUE_COUNT = 1  # 다운로드쿠폰 발급개수 기본값 (Column F가 비어있을 때)
 
 
 class CredentialManager:

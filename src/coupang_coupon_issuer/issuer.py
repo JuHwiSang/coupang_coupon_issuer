@@ -13,6 +13,7 @@ from .config import (
     EXCEL_INPUT_FILE,
     COUPON_MAX_DISCOUNT,
     COUPON_CONTRACT_ID,
+    COUPON_DEFAULT_ISSUE_COUNT,
 )
 
 
@@ -109,7 +110,8 @@ class CouponIssuer:
                     'type': '즉시할인' or '다운로드쿠폰',
                     'validity_days': 2,  (유효기간 일수)
                     'discount_type': 'RATE' or 'FIXED_WITH_QUANTITY' or 'PRICE',
-                    'issue_count': 100,  (발급개수)
+                    'discount': 10,  (할인금액/비율, Column E)
+                    'issue_count': 100,  (발급개수, Column F, 다운로드쿠폰만 사용)
                 }
 
         Returns:
@@ -120,7 +122,12 @@ class CouponIssuer:
         coupon_type = coupon.get('type', '').strip()
         validity_days = coupon.get('validity_days', 1)
         discount_type = coupon.get('discount_type', 'PRICE')
-        issue_count = coupon.get('issue_count', 1)
+        discount = coupon.get('discount', 0)  # Column E: 할인금액/비율 (필수)
+        issue_count = coupon.get('issue_count')  # Column F: 발급개수 (선택적)
+
+        # Validate required fields
+        if discount <= 0:
+            raise ValueError(f"할인금액/비율이 설정되지 않았습니다: {coupon_name}")
 
         print(f"[{timestamp}] [{index}] {coupon_name} ({coupon_type}) 발급 중...", flush=True)
 
@@ -147,7 +154,7 @@ class CouponIssuer:
                     contract_id=COUPON_CONTRACT_ID,
                     name=coupon_name,
                     max_discount_price=COUPON_MAX_DISCOUNT,
-                    discount=issue_count,  # 할인금액/할인율
+                    discount=discount,  # Column E: 할인금액/할인율
                     start_at=start_date,
                     end_at=end_date,
                     coupon_type=discount_type
@@ -158,14 +165,15 @@ class CouponIssuer:
 
             elif coupon_type == '다운로드쿠폰':
                 assert self.user_id is not None
+                assert issue_count is not None  # Should have been set by _fetch_coupons_from_excel
                 # 다운로드쿠폰 정책 구성
                 policy = {
                     "title": coupon_name,
                     "typeOfDiscount": discount_type,
                     "description": f"{coupon_name} ({validity_days}일간 유효)",
-                    "discount": issue_count,  # 할인금액/할인율
+                    "discount": discount,  # Column E: 할인금액/할인율
                     "maximumDiscountPrice": COUPON_MAX_DISCOUNT,
-                    "maximumPerDaily": issue_count  # 일 최대 발급개수
+                    "maximumPerDaily": issue_count  # Column F: 일 최대 발급개수
                 }
 
                 api_result = self.api_client.create_download_coupon(
@@ -196,12 +204,13 @@ class CouponIssuer:
         """
         엑셀 파일에서 쿠폰 정의 읽기
 
-        엑셀 컬럼 (5개):
+        엑셀 컬럼 (6개):
         1. 쿠폰이름
         2. 쿠폰타입 (즉시할인 또는 다운로드쿠폰)
         3. 쿠폰유효기간 (일 단위, 예: 2)
         4. 할인방식 (RATE/FIXED_WITH_QUANTITY/PRICE)
-        5. 발급개수
+        5. 할인금액/비율 (discount value, 할인방식에 따라 의미 다름)
+        6. 발급개수 (다운로드쿠폰 전용, 비어있으면 기본값 사용)
 
         Returns:
             쿠폰 정의 리스트
@@ -229,7 +238,7 @@ class CouponIssuer:
             headers = [cell.value for cell in sheet[1]]  # type: ignore
 
             # 필수 컬럼 체크
-            required_columns = ['쿠폰이름', '쿠폰타입', '쿠폰유효기간', '할인방식', '발급개수']
+            required_columns = ['쿠폰이름', '쿠폰타입', '쿠폰유효기간', '할인방식', '할인금액/비율', '발급개수']
 
             for col in required_columns:
                 if col not in headers:
@@ -286,36 +295,61 @@ class CouponIssuer:
                         f"행 {row_idx}: 잘못된 할인방식 '{discount_type_raw}' (RATE/FIXED_WITH_QUANTITY/PRICE만 가능)"
                     )
 
-                # 5. 발급개수: 숫자만 추출 -> float -> int
-                issue_count_raw = str(row[col_indices['발급개수']])
-                issue_count_digits = re.sub(r'[^\d.]', '', issue_count_raw)  # 숫자와 소수점만 남김
+                # 5. 할인금액/비율: 숫자만 추출 -> float -> int
+                discount_raw = str(row[col_indices['할인금액/비율']])
+                discount_digits = re.sub(r'[^\d.]', '', discount_raw)  # 숫자와 소수점만 남김
                 try:
-                    issue_count = int(float(issue_count_digits)) if issue_count_digits else 0
+                    discount = int(float(discount_digits)) if discount_digits else 0
                 except (ValueError, TypeError):
-                    raise ValueError(f"행 {row_idx}: 발급개수는 숫자여야 합니다 (현재값: {issue_count_raw})")
+                    raise ValueError(f"행 {row_idx}: 할인금액/비율은 숫자여야 합니다 (현재값: {discount_raw})")
 
-                # 6. 할인방식별 추가 검증
+                if discount <= 0:
+                    raise ValueError(f"행 {row_idx}: 할인금액/비율은 0보다 커야 합니다")
+
+                # 6. 발급개수: 선택적 (쿠폰 타입에 따라 처리)
+                issue_count_raw = str(row[col_indices['발급개수']]).strip()
+                issue_count = None
+
+                # 즉시할인: 발급개수 무시 (API에서 사용 안함)
+                if coupon_type == '즉시할인':
+                    issue_count = None  # Not used in API
+
+                # 다운로드쿠폰: 발급개수 필요 (비어있으면 기본값)
+                elif coupon_type == '다운로드쿠폰':
+                    if issue_count_raw and issue_count_raw != 'None':
+                        issue_count_digits = re.sub(r'[^\d.]', '', issue_count_raw)
+                        try:
+                            issue_count = int(float(issue_count_digits)) if issue_count_digits else COUPON_DEFAULT_ISSUE_COUNT
+                            if issue_count < 1:
+                                raise ValueError(f"행 {row_idx}: 발급개수는 1 이상이어야 합니다 (현재: {issue_count})")
+                        except (ValueError, TypeError):
+                            raise ValueError(f"행 {row_idx}: 발급개수는 숫자여야 합니다 (현재값: {issue_count_raw})")
+                    else:
+                        issue_count = COUPON_DEFAULT_ISSUE_COUNT  # Default value
+
+                # 7. 할인방식별 추가 검증 (Column E '할인금액/비율' 기준)
                 if discount_type == 'RATE':
                     # 정률할인: 1~99% 범위 체크
-                    if not (1 <= issue_count <= 99):
-                        raise ValueError(f"행 {row_idx}: RATE 할인율은 1~99 사이여야 합니다 (현재: {issue_count})")
+                    if not (1 <= discount <= 99):
+                        raise ValueError(f"행 {row_idx}: RATE 할인율은 1~99 사이여야 합니다 (현재: {discount})")
                 elif discount_type == 'PRICE':
                     # 정액할인: 10원 단위 및 최소 10원 체크
-                    if issue_count < 10:
-                        raise ValueError(f"행 {row_idx}: PRICE 할인금액은 최소 10원 이상이어야 합니다 (현재: {issue_count})")
-                    if issue_count % 10 != 0:
-                        raise ValueError(f"행 {row_idx}: PRICE 할인금액은 10원 단위여야 합니다 (현재: {issue_count})")
+                    if discount < 10:
+                        raise ValueError(f"행 {row_idx}: PRICE 할인금액은 최소 10원 이상이어야 합니다 (현재: {discount})")
+                    if discount % 10 != 0:
+                        raise ValueError(f"행 {row_idx}: PRICE 할인금액은 10원 단위여야 합니다 (현재: {discount})")
                 elif discount_type == 'FIXED_WITH_QUANTITY':
                     # 수량할인: 1 이상 체크
-                    if issue_count <= 0:
-                        raise ValueError(f"행 {row_idx}: FIXED_WITH_QUANTITY 발급개수는 1 이상이어야 합니다 (현재: {issue_count})")
+                    if discount < 1:
+                        raise ValueError(f"행 {row_idx}: FIXED_WITH_QUANTITY 할인은 1 이상이어야 합니다 (현재: {discount})")
 
                 coupon = {
                     'name': coupon_name,
                     'type': coupon_type,
                     'validity_days': validity_days,
                     'discount_type': discount_type,
-                    'issue_count': issue_count,
+                    'discount': discount,  # NEW: from column E
+                    'issue_count': issue_count,  # From column F (None for instant coupons)
                 }
 
                 coupons.append(coupon)

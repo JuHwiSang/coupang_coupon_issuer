@@ -20,13 +20,13 @@ def temp_credentials(tmp_path):
 
 @pytest.fixture
 def valid_excel(tmp_path):
-    """Valid 5-column Excel file"""
+    """Valid 6-column Excel file"""
     wb = Workbook()
     ws = wb.active
     assert ws is not None
-    ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "발급개수"])
-    ws.append(["테스트쿠폰1", "즉시할인", 30, "RATE", 1000])
-    ws.append(["테스트쿠폰2", "다운로드쿠폰", 15, "PRICE", 500])
+    ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수"])
+    ws.append(["테스트쿠폰1", "즉시할인", 30, "RATE", 10, ""])  # 즉시할인: 발급개수 빈값
+    ws.append(["테스트쿠폰2", "다운로드쿠폰", 15, "PRICE", 500, 100])  # 다운로드: 할인 + 발급개수
     file = tmp_path / "valid.xlsx"
     wb.save(file)
     return file

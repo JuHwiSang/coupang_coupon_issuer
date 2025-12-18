@@ -23,8 +23,8 @@ class TestApplyCommand:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "발급개수"])
-        ws.append(["테스트쿠폰", "즉시할인", 30, "RATE", 50])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수"])
+        ws.append(["테스트쿠폰", "즉시할인", 30, "RATE", 10, ""])
         wb.save(excel_file)
 
         # Mock file operations
@@ -79,8 +79,8 @@ class TestApplyCommand:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "발급개수"])
-        ws.append(["쿠폰1", "즉시할인", 30, "RATE", 100])  # 100% invalid
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수"])
+        ws.append(["쿠폰1", "즉시할인", 30, "RATE", 100, ""])  # 100% invalid
         wb.save(excel_file)
 
         args = MagicMock()
@@ -99,8 +99,8 @@ class TestApplyCommand:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "발급개수"])
-        ws.append(["쿠폰1", "즉시할인", 30, "PRICE", 15])  # Not 10-won unit
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수"])
+        ws.append(["쿠폰1", "즉시할인", 30, "PRICE", 15, ""])  # Not 10-won unit
         wb.save(excel_file)
 
         args = MagicMock()
