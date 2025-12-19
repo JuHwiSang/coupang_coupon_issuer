@@ -144,7 +144,7 @@ sudo coupang_coupon_issuer uninstall
 - [x] 전역 명령어 구현 (심볼릭 링크)
 - [x] install 4개 파라미터 확장
 - [x] Docker 테스트 환경 구성
-- [ ] 테스트 작성 (pytest + requests-mock)
+- [x] 테스트 작성 (pytest + requests-mock + testcontainers)
 - [ ] 성능 최적화 (병렬 처리, 선택사항)
 
 ## 디버깅
@@ -179,25 +179,31 @@ journalctl -u coupang_coupon_issuer --since "1 hour ago"
 - [x] Coupang API 문서 (workflow, parameters 등)
 
 ### 테스트
-- [x] 테스트 작성 (pytest + requests-mock)
-  - **유닛 테스트**: 97개 작성
-  - **Windows 테스트 결과**: 79 passed, 12 skipped, 6 failed (81% 통과율)
+- [x] 유닛 테스트 작성 (pytest + requests-mock)
+  - **유닛 테스트**: 109개 (97개 → 109개, +12개)
+  - **Windows 테스트 결과** (2024-12-19):
     - ✅ test_config.py: 17/17 통과 (100%)
     - ✅ test_coupang_api.py: 12/12 통과 (100%)
     - ✅ test_cli.py: 20/20 통과 (100%)
-    - ⚠️ test_issuer.py: 20/23 통과 (87%, 3개 mock 이슈)
+    - ✅ test_issuer.py: 32/32 통과 (100%, 12개 엣지 케이스 추가)
     - ⚠️ test_scheduler.py: 11/14 통과 (79%, 3개 freezegun 이슈)
-    - ⏭️ test_service.py: 0/12 스킵 (Linux 전용, Windows에서 자동 스킵)
-  - **커버리지**: 69% (config 100%, coupang_api 98%, issuer 92%, scheduler 91%)
+    - ⏭️ test_service.py: 0/17 스킵 (Linux 전용, Windows에서 자동 스킵)
+  - **커버리지**: issuer.py 88% → 94% (+6%)
   - **테스트 실행**: `uv run pytest tests/unit -v`
   - **커버리지 확인**: `uv run pytest --cov=src/coupang_coupon_issuer`
-- [ ] 통합 테스트 (testcontainers)
-  - service.py는 유닛 테스트 불가 → 통합 테스트에서 실제 systemd 환경으로 테스트
-  - Linux 컨테이너 내에서 install/uninstall/service 동작 검증 필요
-  - 전체 워크플로우 E2E 테스트 (apply → install → serve → issue → uninstall)
+
+- [x] 통합 테스트 작성 (testcontainers + systemd)
+  - **통합 테스트**: 35개 작성
+    - test_service_install.py: 14개 (설치 프로세스)
+    - test_service_uninstall.py: 18개 (제거 프로세스)
+    - test_end_to_end.py: 3개 (E2E 워크플로우)
+  - **testcontainers 인프라**: Ubuntu 22.04 + systemd
+  - **실행 환경**: Docker Desktop 필요 (WSL2 backend)
+  - **테스트 실행**: `uv run pytest tests/integration -v -m integration`
+  - **예상 커버리지**: service.py 9% → 90%+ (Linux 환경에서 실행 시)
 
 ### 향후 작업
-- [ ] 통합 테스트 작성 (testcontainers + systemd)
+- [ ] 통합 테스트 실행 및 검증 (Docker 환경)
 - [ ] 성능 최적화 (병렬 처리, 선택사항)
 
 ## 테스트 가이드
@@ -212,36 +218,48 @@ tests/
 │   ├── sample_invalid_columns.xlsx
 │   ├── sample_invalid_rates.xlsx
 │   └── sample_invalid_prices.xlsx
-└── unit/
-    ├── test_config.py            # CredentialManager 테스트 (17개)
-    ├── test_coupang_api.py       # API 클라이언트 + HMAC (12개)
-    ├── test_issuer.py            # 쿠폰 발급 로직 (23개)
-    ├── test_scheduler.py         # 0시 스케줄러 (14개)
-    ├── test_service.py           # systemd 관리 (17개, Linux only)
-    └── test_cli.py               # CLI 명령어 (20개)
+├── unit/                         # 유닛 테스트 (109개)
+│   ├── test_config.py            # CredentialManager 테스트 (17개)
+│   ├── test_coupang_api.py       # API 클라이언트 + HMAC (12개)
+│   ├── test_issuer.py            # 쿠폰 발급 로직 (32개, 12개 엣지 케이스 추가)
+│   ├── test_scheduler.py         # 0시 스케줄러 (14개)
+│   ├── test_service.py           # systemd 관리 (17개, Linux only)
+│   └── test_cli.py               # CLI 명령어 (20개)
+└── integration/                  # 통합 테스트 (35개, Docker 필요)
+    ├── conftest.py               # testcontainers 인프라 (250 라인)
+    ├── test_service_install.py   # 설치 프로세스 (14개)
+    ├── test_service_uninstall.py # 제거 프로세스 (18개)
+    └── test_end_to_end.py        # E2E 워크플로우 (3개)
 ```
 
 ### 테스트 실행 명령어
 
 ```bash
-# 전체 유닛 테스트
+# 유닛 테스트 (Windows 호환, 빠름)
 uv run pytest tests/unit -v
 
-# 특정 파일만
-uv run pytest tests/unit/test_config.py -v
+# 통합 테스트 (Docker Desktop 필요, 느림)
+uv run pytest tests/integration -v -m integration
+
+# 전체 테스트
+uv run pytest -v
 
 # 커버리지 포함
 uv run pytest tests/unit --cov=src/coupang_coupon_issuer --cov-report=html
 
-# Linux 전용 테스트 스킵 (Windows에서)
-uv run pytest tests/unit -m "not linux_only"
+# 특정 파일만
+uv run pytest tests/unit/test_issuer.py -v
 ```
 
 ### Windows vs Linux 테스트
 
-- **Windows 환경**: service.py 테스트 스킵 (os.geteuid() 없음)
-- **Linux 환경**: 전체 테스트 실행 가능
-- **통합 테스트**: testcontainers로 Ubuntu 22.04 컨테이너 내에서 실행
+- **유닛 테스트**:
+  - Windows 환경: 109개 중 97개 실행 (service.py 12개 스킵)
+  - Linux 환경: 109개 전부 실행 가능
+- **통합 테스트**:
+  - Windows: Docker Desktop(WSL2) 필요
+  - Linux: Docker만 필요
+  - testcontainers로 Ubuntu 22.04 + systemd 컨테이너 자동 실행
 
 ### 테스트 작성 규칙
 

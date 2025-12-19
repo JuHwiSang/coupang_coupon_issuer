@@ -151,3 +151,82 @@
 - `COUPON_DEFAULT_ISSUE_COUNT = 1` (다운로드쿠폰 발급개수 기본값)
 
 **마이그레이션**: 불필요 (프로젝트 미배포)
+
+---
+
+## 2024-12-19
+
+### 통합 테스트 추가 (testcontainers)
+
+- **목적**: service.py의 Linux/systemd 의존 코드 테스트
+- **환경**: Ubuntu 22.04 + systemd in Docker container
+- **라이브러리**: testcontainers-python
+- **실행 환경**: Docker Desktop (WSL2 backend on Windows)
+
+### 통합 테스트 구조
+
+```
+tests/integration/
+├── conftest.py               # testcontainers 인프라 (250 라인)
+├── test_service_install.py   # 설치 프로세스 (14개 테스트)
+├── test_service_uninstall.py # 제거 프로세스 (18개 테스트)
+└── test_end_to_end.py        # E2E 워크플로우 (3개 테스트)
+```
+
+### testcontainers 핵심 픽스처
+
+1. **systemd_container** (session scope)
+   - Ubuntu 22.04 컨테이너 생성
+   - privileged=True로 systemd 활성화
+   - 프로젝트 코드 /app에 마운트
+   - Python 3, pip, sudo 자동 설치
+   - 5초 systemd 초기화 대기
+
+2. **clean_container** (function scope)
+   - 각 테스트 전 서비스/파일 정리
+   - systemctl stop/disable
+   - /opt, /etc, /usr/local/bin 정리
+   - systemctl daemon-reload
+
+3. **container_exec**
+   - 컨테이너 내 명령 실행 헬퍼
+   - exit code와 stdout 반환
+   - 에러 시 자동 예외 발생
+
+4. **installed_service**
+   - 서비스 설치 상태 제공
+   - credentials, 경로 정보 반환
+
+5. **file_permission_checker**
+   - stat로 파일 권한 확인
+   - mode, owner, group 반환
+
+6. **verify_systemd_unit**
+   - systemctl show로 서비스 속성 검증
+
+### 통합 테스트 실행 방법
+
+```bash
+# Docker Desktop 실행 후
+uv run pytest tests/integration -v -m integration
+```
+
+### 통합 테스트 커버리지 목표
+
+- **service.py**: 9% → 90%+ (180 라인)
+- **전체**: 70% → 85%+
+
+### 유닛 테스트 개선
+
+- **issuer.py**: 88% → 94% (+6%)
+- **테스트 추가**: 12개 엣지 케이스 테스트
+  - 빈 쿠폰 리스트 처리
+  - 예외 전파 검증
+  - 입력 검증 (잘못된 타입, 할인방식, 발급개수 등)
+
+### 테스트 실행 통계 (2024-12-19)
+
+- **유닛 테스트**: 109개 (97개 → 109개, +12개)
+- **통합 테스트**: 35개 (신규)
+- **전체**: 144개
+- **Windows 통과율**: 97/109 (89%, service.py 12개 스킵)
