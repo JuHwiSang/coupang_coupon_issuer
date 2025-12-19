@@ -3,10 +3,8 @@ version: '3.8'
 services:
   test-env:
     image: ubuntu:22.04
-    privileged: true  # systemd 필수
     volumes:
       - ./:/app
-      - /sys/fs/cgroup:/sys/fs/cgroup:ro  # cgroup 마운트
-    command: /sbin/init  # systemd 시작
+    command: /bin/bash
     stdin_open: true
     tty: true

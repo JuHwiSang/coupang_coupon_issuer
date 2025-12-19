@@ -14,13 +14,17 @@ tests/
 │   ├── sample_invalid_columns.xlsx
 │   ├── sample_invalid_rates.xlsx
 │   └── sample_invalid_prices.xlsx
-└── unit/
-    ├── test_config.py            # CredentialManager 테스트 (17개)
-    ├── test_coupang_api.py       # API 클라이언트 + HMAC (12개)
-    ├── test_issuer.py            # 쿠폰 발급 로직 (23개)
-    ├── test_scheduler.py         # 0시 스케줄러 (14개)
-    ├── test_service.py           # systemd 관리 (12개, Linux only)
-    └── test_cli.py               # CLI 명령어 (20개)
+├── unit/
+│   ├── test_config.py            # CredentialManager 테스트 (17개)
+│   ├── test_coupang_api.py       # API 클라이언트 + HMAC (12개)
+│   ├── test_issuer.py            # 쿠폰 발급 로직 (32개)
+│   ├── test_service.py           # Cron 관리 (28개, Linux only)
+│   └── test_cli.py               # CLI 명령어 (20개)
+└── integration/                  # 통합 테스트 (cron 기반)
+    ├── conftest.py               # testcontainers fixture (cron)
+    ├── test_service_install.py   # 설치 프로세스 (11개)
+    ├── test_service_uninstall.py # 제거 프로세스 (7개)
+    └── test_end_to_end.py        # E2E 워크플로우 (3개)
 ```
 
 ## 실행 방법
@@ -126,13 +130,6 @@ def test_api_call(requests_mock):
     requests_mock.post("https://api.example.com", json={"result": "ok"})
     # 테스트 코드
 
-# 시간 모킹 (scheduler 테스트)
-from freezegun import freeze_time
-
-@freeze_time("2024-12-17 00:00:00")
-def test_midnight():
-    # 테스트 코드
-
 # 일반 객체 모킹
 def test_function(mocker):
     mocker.patch('module.function', return_value="mocked")
@@ -173,10 +170,9 @@ pytestmark = pytest.mark.skipif(os.name == 'nt', reason="Linux only")
 |------|----------|------|
 | config.py | 100% | ✅ |
 | coupang_api.py | 98% | ✅ |
-| issuer.py | 92% | ✅ |
-| scheduler.py | 91% | ✅ |
+| issuer.py | 94% | ✅ |
 | cli (main.py) | - | ✅ |
-| service.py | 9% | ⏭️ Linux에서 테스트 |
+| service.py | - | ✅ Linux 통합 테스트 |
 
 **전체**: 69%
 

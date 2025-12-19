@@ -160,37 +160,6 @@ class TestIssueCommand:
 
 
 @pytest.mark.unit
-class TestServeCommand:
-    """Test 'serve' command"""
-
-    def test_serve_starts_scheduler(self, mocker):
-        """Serve should start the MidnightScheduler"""
-        mock_load_env = mocker.patch('main.CredentialManager.load_credentials_to_env')
-        mock_scheduler_class = mocker.patch('main.MidnightScheduler')
-        mock_scheduler = MagicMock()
-        mock_scheduler_class.return_value = mock_scheduler
-
-        # Mock CouponIssuer to avoid real instantiation
-        mocker.patch('main.CouponIssuer')
-
-        main.cmd_serve()
-
-        # Verify scheduler was created and run() called
-        mock_scheduler_class.assert_called_once()
-        mock_scheduler.run.assert_called_once()
-
-    def test_serve_handles_credential_error(self, mocker, capsys):
-        """Serve should exit if credentials can't be loaded"""
-        mocker.patch('main.CredentialManager.load_credentials_to_env', side_effect=Exception("Failed"))
-
-        with pytest.raises(SystemExit):
-            main.cmd_serve()
-
-        captured = capsys.readouterr()
-        assert "ERROR: API 키 로드 실패" in captured.out
-
-
-@pytest.mark.unit
 class TestInstallCommand:
     """Test 'install' command"""
 
@@ -209,9 +178,9 @@ class TestInstallCommand:
         assert "ERROR: 모든 인자가 필요합니다" in captured.out
         assert "--user-id" in captured.out
 
-    def test_install_calls_systemd_service(self, mocker):
-        """Install should call SystemdService.install with correct args"""
-        mock_install = mocker.patch('main.SystemdService.install')
+    def test_install_calls_crontab_service(self, mocker):
+        """Install should call CrontabService.install with correct args"""
+        mock_install = mocker.patch('main.CrontabService.install')
 
         args = MagicMock()
         args.access_key = "access-key"
@@ -228,9 +197,9 @@ class TestInstallCommand:
 class TestUninstallCommand:
     """Test 'uninstall' command"""
 
-    def test_uninstall_calls_systemd_service(self, mocker):
-        """Uninstall should call SystemdService.uninstall"""
-        mock_uninstall = mocker.patch('main.SystemdService.uninstall')
+    def test_uninstall_calls_crontab_service(self, mocker):
+        """Uninstall should call CrontabService.uninstall"""
+        mock_uninstall = mocker.patch('main.CrontabService.uninstall')
 
         main.cmd_uninstall()
 
@@ -292,14 +261,6 @@ class TestMainFunction:
 
         mock_cmd_issue.assert_called_once()
 
-    def test_main_serve_command_dispatched(self, mocker):
-        """Serve command should be dispatched correctly"""
-        mock_cmd_serve = mocker.patch('main.cmd_serve')
-
-        mocker.patch('sys.argv', ['main.py', 'serve'])
-        main.main()
-
-        mock_cmd_serve.assert_called_once()
 
     def test_main_install_command_dispatched(self, mocker):
         """Install command should be dispatched correctly"""

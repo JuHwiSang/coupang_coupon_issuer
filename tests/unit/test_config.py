@@ -10,11 +10,12 @@ from unittest.mock import patch, mock_open, MagicMock
 from coupang_coupon_issuer.config import (
     CredentialManager,
     SERVICE_NAME,
-    CHECK_INTERVAL,
     CONFIG_FILE,
     EXCEL_INPUT_FILE,
     COUPON_MAX_DISCOUNT,
     COUPON_CONTRACT_ID,
+    LOG_DIR,
+    LOG_FILE,
 )
 
 
@@ -25,8 +26,16 @@ class TestConstants:
     def test_service_name(self):
         assert SERVICE_NAME == "coupang_coupon_issuer"
 
-    def test_check_interval(self):
-        assert CHECK_INTERVAL == 30
+    def test_log_dir(self):
+        """Test log directory constant"""
+        assert "coupang_coupon_issuer" in str(LOG_DIR)
+        assert ".local" in str(LOG_DIR)
+        assert "state" in str(LOG_DIR)
+
+    def test_log_file(self):
+        """Test log file constant"""
+        assert str(LOG_FILE).endswith("issuer.log")
+        assert "coupang_coupon_issuer" in str(LOG_FILE)
 
     def test_config_file_path(self):
         # Use Path comparison to handle Windows/Linux differences

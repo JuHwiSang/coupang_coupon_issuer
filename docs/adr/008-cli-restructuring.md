@@ -1,6 +1,11 @@
 # ADR 008: CLI 구조 재설계
 
-**상태**: 승인됨
+> **⚠️ PARTIALLY SUPERSEDED**: serve 명령어는 ADR 010 (crontab-service)로 제거되었습니다.
+>
+> 날짜: 2024-12-19
+> 참조: [ADR 010: Crontab 기반 스케줄링](./010-crontab-service.md)
+
+**상태**: 승인됨 (일부 대체됨)
 **날짜**: 2024-12-17
 **결정자**: 프로젝트 오너
 

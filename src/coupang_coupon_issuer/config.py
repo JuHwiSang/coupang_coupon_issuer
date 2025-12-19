@@ -8,15 +8,18 @@ from typing import Optional
 
 # 서비스 설정
 SERVICE_NAME = "coupang_coupon_issuer"
-CHECK_INTERVAL = 30  # 초 단위 - 0시 체크 주기
 
-# API 키 저장 경로 (systemd 서비스가 접근 가능한 위치)
+# API 키 저장 경로
 CONFIG_DIR = Path("/etc") / SERVICE_NAME
 CONFIG_FILE = CONFIG_DIR / "credentials.json"
 
 # 엑셀 파일 경로
 EXCEL_INPUT_FILE = Path("/etc") / SERVICE_NAME / "coupons.xlsx"  # 발급할 쿠폰 목록
 EXCEL_RESULT_DIR = "results"  # 결과 저장 디렉토리
+
+# 로그 디렉토리 (사용자 수준)
+LOG_DIR = Path.home() / ".local" / "state" / SERVICE_NAME
+LOG_FILE = LOG_DIR / "issuer.log"
 
 # 쿠폰 발급 고정값
 COUPON_MAX_DISCOUNT = 100000  # 최대 할인금액 (10만원)

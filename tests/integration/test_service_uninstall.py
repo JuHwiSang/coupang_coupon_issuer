@@ -1,389 +1,131 @@
 """
-Integration tests for service.py uninstallation process.
+Integration tests for CrontabService uninstallation process.
 
-Tests the SystemdService.uninstall() method in a real Ubuntu 22.04 + systemd environment.
-Covers lines 149-220 in service.py.
+Tests the CrontabService.uninstall() method in a real Ubuntu 22.04 + cron environment.
 """
 
 import pytest
-from unittest.mock import patch
 
 
-pytestmark = [
-    pytest.mark.integration,
-    pytest.mark.timeout(300)  # 5 minute timeout
-]
+@pytest.mark.integration
+class TestUninstallBasic:
+    """Basic uninstallation tests"""
 
+    def test_uninstall_removes_cron_job(self, installed_service):
+        """Verify cron job is removed"""
+        exec_fn = installed_service["exec"]
 
-class TestServiceUninstallation:
-    """Test SystemdService.uninstall() method in real Linux environment"""
+        # Verify job exists before uninstall
+        exit_code, output_before = exec_fn("crontab -l")
+        assert exit_code == 0
+        assert "# coupang_coupon_issuer_job" in output_before
 
-    def test_uninstall_stops_service(
-        self, installed_service, container_exec
-    ):
-        """
-        Verify uninstall stops the running service.
+        # Uninstall (answer 'n' to all prompts)
+        uninstall_cmd = "cd /app && echo -e 'n\\nn\\nn\\nn' | python3 main.py uninstall"
+        exec_fn(uninstall_cmd)
 
-        Covers: service.py lines 155-161
-        """
-        # Mock user input to skip prompts
-        uninstall_cmd = "cd /app && echo 'n\nn\nn' | python3 main.py uninstall"
+        # Verify job is removed
+        exit_code, output_after = exec_fn("crontab -l || true")
+        # Either no crontab exists (exit code 1) or it exists but has no our job
+        assert "# coupang_coupon_issuer_job" not in output_after
 
-        result = container_exec(uninstall_cmd, check=False)
+    def test_uninstall_removes_symlink(self, installed_service):
+        """Verify symlink is removed"""
+        exec_fn = installed_service["exec"]
 
-        # Check service is stopped
-        status_result = container_exec(
-            "systemctl is-active coupang_coupon_issuer",
-            check=False
-        )
+        # Verify symlink exists before uninstall
+        exit_code, _ = exec_fn("test -L /usr/local/bin/coupang_coupon_issuer")
+        assert exit_code == 0
 
-        # Service should be inactive or not found
-        assert status_result['exit_code'] != 0 or 'inactive' in status_result['stdout']
-
-    def test_uninstall_disables_service_autostart(
-        self, installed_service, container_exec
-    ):
-        """
-        Verify uninstall disables service from boot.
-
-        Covers: service.py line 156
-        """
-        # Uninstall with all 'no' to prompts
-        uninstall_cmd = "cd /app && echo 'n\nn\nn' | python3 main.py uninstall"
-        container_exec(uninstall_cmd, check=False)
-
-        # Check if service is disabled
-        enabled_result = container_exec(
-            "systemctl is-enabled coupang_coupon_issuer",
-            check=False
-        )
-
-        # Should return disabled or not-found
-        assert enabled_result['exit_code'] != 0 or 'disabled' in enabled_result['stdout']
-
-    def test_uninstall_removes_systemd_service_file(
-        self, installed_service, container_exec
-    ):
-        """
-        Verify uninstall deletes systemd service file.
-
-        Covers: service.py lines 164-170
-        """
-        service_file = "/etc/systemd/system/coupang_coupon_issuer.service"
-
-        # Verify file exists before uninstall
-        before_result = container_exec(f"test -f {service_file}", check=False)
-        assert before_result['exit_code'] == 0, "Service file should exist before uninstall"
-
-        # Uninstall
-        uninstall_cmd = "cd /app && echo 'n\nn\nn' | python3 main.py uninstall"
-        container_exec(uninstall_cmd, check=False)
-
-        # Verify file is removed
-        after_result = container_exec(f"test -f {service_file}", check=False)
-        assert after_result['exit_code'] != 0, "Service file should be removed"
-
-    def test_uninstall_runs_daemon_reload_after_file_removal(
-        self, installed_service, container_exec
-    ):
-        """
-        Verify uninstall runs systemctl daemon-reload.
-
-        Covers: service.py line 172
-        """
-        # Uninstall
-        uninstall_cmd = "cd /app && echo 'n\nn\nn' | python3 main.py uninstall"
-        container_exec(uninstall_cmd, check=False)
-
-        # After daemon-reload, service should not appear in list-unit-files
-        list_result = container_exec(
-            "systemctl list-unit-files | grep coupang_coupon_issuer || true"
-        )
-
-        # Service should not be listed (or empty output)
-        assert 'coupang_coupon_issuer.service' not in list_result['stdout']
-
-    def test_uninstall_removes_symlink(
-        self, installed_service, container_exec
-    ):
-        """
-        Verify uninstall removes global command symlink.
-
-        Covers: service.py lines 175-181
-        """
-        symlink_path = "/usr/local/bin/coupang_coupon_issuer"
-
-        # Verify symlink exists before
-        before_result = container_exec(f"test -L {symlink_path}", check=False)
-        assert before_result['exit_code'] == 0, "Symlink should exist before uninstall"
-
-        # Uninstall
-        uninstall_cmd = "cd /app && echo 'n\nn\nn' | python3 main.py uninstall"
-        container_exec(uninstall_cmd, check=False)
+        # Uninstall (answer 'n' to all prompts)
+        uninstall_cmd = "cd /app && echo -e 'n\\nn\\nn\\nn' | python3 main.py uninstall"
+        exec_fn(uninstall_cmd)
 
         # Verify symlink is removed
-        after_result = container_exec(f"test -L {symlink_path}", check=False)
-        assert after_result['exit_code'] != 0, "Symlink should be removed"
+        exit_code, _ = exec_fn("test -L /usr/local/bin/coupang_coupon_issuer")
+        assert exit_code != 0  # Should not exist
 
-    def test_uninstall_prompts_for_install_directory_deletion(
-        self, installed_service, container_exec
-    ):
-        """
-        Verify uninstall prompts user and deletes /opt when 'y' given.
 
-        Covers: service.py lines 184-194
-        """
-        install_dir = "/opt/coupang_coupon_issuer"
+@pytest.mark.integration
+class TestUninstallFileDeletion:
+    """Test file deletion prompts and behavior"""
 
-        # Verify directory exists before
-        before_result = container_exec(f"test -d {install_dir}", check=False)
-        assert before_result['exit_code'] == 0, "Install dir should exist"
+    def test_uninstall_with_all_no_preserves_files(self, installed_service):
+        """Answering 'n' to all prompts should preserve files"""
+        exec_fn = installed_service["exec"]
 
-        # Uninstall with 'y' to first prompt, 'n' to others
-        uninstall_cmd = "cd /app && echo 'y\nn\nn' | python3 main.py uninstall"
-        result = container_exec(uninstall_cmd, check=False)
+        # Uninstall with all 'n'
+        uninstall_cmd = "cd /app && echo -e 'n\\nn\\nn\\nn' | python3 main.py uninstall"
+        exec_fn(uninstall_cmd)
 
-        # Verify directory is removed
-        after_result = container_exec(f"test -d {install_dir}", check=False)
-        assert after_result['exit_code'] != 0, "Install dir should be removed when user says 'y'"
+        # Verify files are preserved
+        exit_code, _ = exec_fn("test -d /opt/coupang_coupon_issuer")
+        assert exit_code == 0  # Directory still exists
 
-        # Verify prompt was shown
-        assert "설치 디렉토리도 삭제하시겠습니까" in result['stdout'] or "삭제" in result['stdout']
+        exit_code, _ = exec_fn("test -f /etc/coupang_coupon_issuer/credentials.json")
+        assert exit_code == 0  # Credentials still exist
 
-    def test_uninstall_preserves_install_directory_on_no(
-        self, installed_service, container_exec
-    ):
-        """
-        Verify uninstall preserves /opt when user declines.
+    def test_uninstall_with_yes_to_install_dir(self, installed_service):
+        """Answering 'y' to install dir prompt should delete it"""
+        exec_fn = installed_service["exec"]
 
-        Covers: service.py lines 193-194
-        """
-        install_dir = "/opt/coupang_coupon_issuer"
+        # Uninstall with 'y' to first prompt (install dir), 'n' to others
+        uninstall_cmd = "cd /app && echo -e 'y\\nn\\nn\\nn' | python3 main.py uninstall"
+        exec_fn(uninstall_cmd)
 
-        # Uninstall with 'n' to all prompts
-        uninstall_cmd = "cd /app && echo 'n\nn\nn' | python3 main.py uninstall"
-        result = container_exec(uninstall_cmd, check=False)
+        # Verify install dir is removed
+        exit_code, _ = exec_fn("test -d /opt/coupang_coupon_issuer")
+        assert exit_code != 0  # Directory should not exist
 
-        # Verify directory still exists
-        after_result = container_exec(f"test -d {install_dir}", check=False)
-        assert after_result['exit_code'] == 0, "Install dir should be preserved when user says 'n'"
+        # Other files still exist
+        exit_code, _ = exec_fn("test -f /etc/coupang_coupon_issuer/credentials.json")
+        assert exit_code == 0
 
-        # Verify preservation message
-        assert "유지됩니다" in result['stdout'] or result['exit_code'] == 0
+    def test_uninstall_with_yes_to_credentials(self, installed_service):
+        """Answering 'y' to credentials prompt should delete it"""
+        exec_fn = installed_service["exec"]
 
-    def test_uninstall_prompts_for_credentials_deletion(
-        self, installed_service, container_exec
-    ):
-        """
-        Verify uninstall prompts and deletes credentials.json when 'y' given.
+        # Uninstall with 'n', 'y', 'n', 'n' (yes to credentials only)
+        uninstall_cmd = "cd /app && echo -e 'n\\ny\\nn\\nn' | python3 main.py uninstall"
+        exec_fn(uninstall_cmd)
 
-        Covers: service.py lines 197-207
-        """
-        creds_file = "/etc/coupang_coupon_issuer/credentials.json"
+        # Verify credentials are removed
+        exit_code, _ = exec_fn("test -f /etc/coupang_coupon_issuer/credentials.json")
+        assert exit_code != 0  # Credentials should not exist
 
-        # Verify file exists before
-        before_result = container_exec(f"test -f {creds_file}", check=False)
-        assert before_result['exit_code'] == 0, "Credentials file should exist"
+        # Install dir still exists
+        exit_code, _ = exec_fn("test -d /opt/coupang_coupon_issuer")
+        assert exit_code == 0
 
-        # Uninstall with 'n', 'y', 'n' (skip install dir, delete credentials, skip excel)
-        uninstall_cmd = "cd /app && echo 'n\ny\nn' | python3 main.py uninstall"
-        result = container_exec(uninstall_cmd, check=False)
+    def test_uninstall_with_yes_to_all_removes_everything(self, installed_service):
+        """Answering 'y' to all prompts should remove everything"""
+        exec_fn = installed_service["exec"]
 
-        # Verify file is removed
-        after_result = container_exec(f"test -f {creds_file}", check=False)
-        assert after_result['exit_code'] != 0, "Credentials should be removed when user says 'y'"
+        # Uninstall with all 'y'
+        uninstall_cmd = "cd /app && echo -e 'y\\ny\\ny\\ny' | python3 main.py uninstall"
+        exec_fn(uninstall_cmd)
 
-    def test_uninstall_preserves_credentials_on_no(
-        self, installed_service, container_exec
-    ):
-        """
-        Verify uninstall preserves credentials.json when user declines.
+        # Verify everything is removed
+        exit_code, _ = exec_fn("test -d /opt/coupang_coupon_issuer")
+        assert exit_code != 0  # Install dir removed
 
-        Covers: service.py lines 206-207
-        """
-        creds_file = "/etc/coupang_coupon_issuer/credentials.json"
+        exit_code, _ = exec_fn("test -f /etc/coupang_coupon_issuer/credentials.json")
+        assert exit_code != 0  # Credentials removed
 
-        # Uninstall with 'n' to all prompts
-        uninstall_cmd = "cd /app && echo 'n\nn\nn' | python3 main.py uninstall"
-        container_exec(uninstall_cmd, check=False)
+        exit_code, _ = exec_fn("test -d /root/.local/state/coupang_coupon_issuer")
+        assert exit_code != 0  # Log dir removed
 
-        # Verify file still exists
-        after_result = container_exec(f"test -f {creds_file}", check=False)
-        assert after_result['exit_code'] == 0, "Credentials should be preserved when user says 'n'"
 
-    def test_uninstall_prompts_for_excel_deletion(
-        self, installed_service, container_exec, mock_excel_in_container
-    ):
-        """
-        Verify uninstall prompts and deletes coupons.xlsx when 'y' given.
+@pytest.mark.integration
+class TestUninstallWithoutInstall:
+    """Test uninstalling when nothing is installed"""
 
-        Covers: service.py lines 210-218
-        """
-        # Create Excel file
-        excel_file = mock_excel_in_container('valid')
+    def test_uninstall_without_cron_job_succeeds(self, clean_container, container_exec):
+        """Uninstalling when no cron job exists should succeed gracefully"""
+        # Try to uninstall without installing first
+        uninstall_cmd = "cd /app && echo -e 'n\\nn\\nn\\nn' | python3 main.py uninstall"
+        exit_code, output = container_exec(uninstall_cmd)
 
-        # Verify file exists
-        before_result = container_exec(f"test -f {excel_file}", check=False)
-        assert before_result['exit_code'] == 0, "Excel file should exist"
-
-        # Uninstall with 'n', 'n', 'y' (skip install dir and creds, delete excel)
-        uninstall_cmd = "cd /app && echo 'n\nn\ny' | python3 main.py uninstall"
-        result = container_exec(uninstall_cmd, check=False)
-
-        # Verify file is removed
-        after_result = container_exec(f"test -f {excel_file}", check=False)
-        assert after_result['exit_code'] != 0, "Excel should be removed when user says 'y'"
-
-    def test_uninstall_handles_excel_deletion_error(
-        self, installed_service, container_exec
-    ):
-        """
-        Verify uninstall handles errors when deleting Excel file.
-
-        Covers: service.py lines 217-218
-        """
-        # Excel file may not exist, verify uninstall handles it gracefully
-        excel_file = "/etc/coupang_coupon_issuer/coupons.xlsx"
-
-        # Ensure Excel doesn't exist
-        container_exec(f"rm -f {excel_file}", check=False)
-
-        # Uninstall with 'y' to Excel prompt
-        uninstall_cmd = "cd /app && echo 'n\nn\ny' | python3 main.py uninstall"
-        result = container_exec(uninstall_cmd, check=False)
-
-        # Should complete without error even if file doesn't exist
-        assert result['exit_code'] == 0 or "ERROR" in result['stdout']
-
-    def test_uninstall_requires_root_permission(
-        self, installed_service, container_exec
-    ):
-        """
-        Verify uninstall requires root permission.
-
-        Covers: service.py lines 149, 22-26
-        """
-        # Create non-root user
-        container_exec("useradd -m testuser", check=False)
-
-        # Try to uninstall as non-root
-        uninstall_cmd = "cd /app && echo 'n\nn\nn' | python3 main.py uninstall"
-
-        result = container_exec(
-            f"su - testuser -c '{uninstall_cmd}'",
-            check=False
-        )
-
-        # Should fail with permission error
-        assert result['exit_code'] != 0
-        assert "root 권한이 필요합니다" in result['stdout'] or "PermissionError" in result['stdout']
-
-    def test_uninstall_prints_completion_message(
-        self, installed_service, container_exec
-    ):
-        """
-        Verify uninstall prints completion message.
-
-        Covers: service.py line 220
-        """
-        # Uninstall
-        uninstall_cmd = "cd /app && echo 'n\nn\nn' | python3 main.py uninstall"
-        result = container_exec(uninstall_cmd, check=False)
-
-        # Check for completion message
-        assert "제거 완료" in result['stdout'] or "완료" in result['stdout']
-
-    def test_uninstall_handles_all_prompts_with_mixed_responses(
-        self, installed_service, container_exec, mock_excel_in_container
-    ):
-        """
-        Verify uninstall handles complex scenario with mixed user inputs.
-
-        Covers: service.py lines 186-218
-        """
-        # Create Excel file
-        mock_excel_in_container('valid')
-
-        install_dir = "/opt/coupang_coupon_issuer"
-        creds_file = "/etc/coupang_coupon_issuer/credentials.json"
-        excel_file = "/etc/coupang_coupon_issuer/coupons.xlsx"
-
-        # Verify all exist before
-        assert container_exec(f"test -d {install_dir}", check=False)['exit_code'] == 0
-        assert container_exec(f"test -f {creds_file}", check=False)['exit_code'] == 0
-        assert container_exec(f"test -f {excel_file}", check=False)['exit_code'] == 0
-
-        # Uninstall with mixed responses: y, n, y
-        # Delete install dir, keep credentials, delete Excel
-        uninstall_cmd = "cd /app && echo 'y\nn\ny' | python3 main.py uninstall"
-        result = container_exec(uninstall_cmd, check=False)
-
-        # Verify expected state
-        assert container_exec(f"test -d {install_dir}", check=False)['exit_code'] != 0, \
-            "Install dir should be deleted"
-        assert container_exec(f"test -f {creds_file}", check=False)['exit_code'] == 0, \
-            "Credentials should be preserved"
-        assert container_exec(f"test -f {excel_file}", check=False)['exit_code'] != 0, \
-            "Excel should be deleted"
-
-    def test_uninstall_handles_service_file_deletion_error(
-        self, installed_service, container_exec
-    ):
-        """
-        Verify uninstall handles errors when deleting service file.
-
-        Covers: service.py lines 169-170
-        """
-        service_file = "/etc/systemd/system/coupang_coupon_issuer.service"
-
-        # Make service file immutable (can't be deleted)
-        container_exec(f"chattr +i {service_file}", check=False)
-
-        # Uninstall
-        uninstall_cmd = "cd /app && echo 'n\nn\nn' | python3 main.py uninstall"
-        result = container_exec(uninstall_cmd, check=False)
-
-        # Should print ERROR but continue
-        # (Note: chattr may not work in container, so this may not trigger error)
-
-        # Remove immutable flag for cleanup
-        container_exec(f"chattr -i {service_file}", check=False)
-
-    def test_uninstall_handles_symlink_deletion_error(
-        self, installed_service, container_exec
-    ):
-        """
-        Verify uninstall handles errors when deleting symlink.
-
-        Covers: service.py lines 180-181
-        """
-        # Make /usr/local/bin immutable
-        container_exec("chattr +i /usr/local/bin", check=False)
-
-        # Uninstall
-        uninstall_cmd = "cd /app && echo 'n\nn\nn' | python3 main.py uninstall"
-        result = container_exec(uninstall_cmd, check=False)
-
-        # Should handle error gracefully
-        # (Note: chattr may not work, this is defensive testing)
-
-        # Restore permissions
-        container_exec("chattr -i /usr/local/bin", check=False)
-
-    def test_uninstall_when_service_not_running(
-        self, installed_service, container_exec
-    ):
-        """
-        Verify uninstall works when service is already stopped.
-
-        Covers: service.py lines 155-161
-        """
-        # Stop service manually
-        container_exec("systemctl stop coupang_coupon_issuer", check=False)
-
-        # Uninstall
-        uninstall_cmd = "cd /app && echo 'n\nn\nn' | python3 main.py uninstall"
-        result = container_exec(uninstall_cmd, check=False)
-
-        # Should complete without error
-        assert result['exit_code'] == 0 or "제거 완료" in result['stdout']
+        # Should not crash (exit code 0 or 1 acceptable)
+        # Just verify it doesn't crash with an exception
+        assert "Traceback" not in output

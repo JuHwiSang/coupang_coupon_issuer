@@ -1,18 +1,19 @@
 # Coupang Coupon Issuer
 
-Automated coupon issuance service running on Linux systemd.
+Automated coupon issuance service running on Linux with cron scheduling.
 
 ## Features
 
-- Daily coupon issuance at midnight
+- Daily coupon issuance at midnight (cron-based)
 - Secure API key storage (600 permissions)
-- systemd integration for service management
-- Comprehensive logging via journalctl
+- Simple cron job management
+- User-friendly logging (no sudo required)
+- Auto-installation of cron on major distributions
 
 ## Requirements
 
 - Python 3.10+
-- Linux OS (systemd required)
+- Linux OS (cron will be auto-installed if missing)
 - root access (for service installation)
 
 ## Installation
@@ -25,7 +26,7 @@ cd coupang_coupon_issuer
 # 2. Install dependencies
 uv sync
 
-# 3. Install systemd service
+# 3. Install cron-based service
 sudo python3 main.py install \
   --access-key YOUR_ACCESS_KEY \
   --secret-key YOUR_SECRET_KEY \
@@ -38,17 +39,17 @@ sudo python3 main.py install \
 ### Service Management
 
 ```bash
-# Check status
-systemctl status coupang_coupon_issuer
+# View cron schedule
+crontab -l
 
 # View logs
-journalctl -u coupang_coupon_issuer -f
+tail -f ~/.local/state/coupang_coupon_issuer/issuer.log
 
-# Stop service
-sudo systemctl stop coupang_coupon_issuer
+# Manual execution (for testing)
+coupang_coupon_issuer issue
 
-# Start service
-sudo systemctl start coupang_coupon_issuer
+# Edit cron schedule manually
+crontab -e
 ```
 
 ### Uninstall Service

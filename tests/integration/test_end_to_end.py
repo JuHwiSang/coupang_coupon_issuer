@@ -5,151 +5,86 @@ Tests the full lifecycle: install → apply → issue → logs → uninstall
 """
 
 import pytest
-from pathlib import Path
 
 
-pytestmark = [
-    pytest.mark.integration,
-    pytest.mark.slow,
-    pytest.mark.timeout(600)  # 10 minute timeout
-]
-
-
+@pytest.mark.integration
 class TestEndToEndWorkflow:
-    """Test complete service lifecycle in real environment"""
+    """Complete workflow tests"""
 
-    def test_complete_lifecycle(
-        self, clean_container, container_exec, mock_excel_in_container
-    ):
-        """
-        Test complete lifecycle: install → apply → issue → verify logs → uninstall.
-
-        This is the full workflow a user would experience:
-        1. Install service with credentials
-        2. Apply Excel file with coupon definitions
-        3. Manually trigger issue command
-        4. Verify service logs show issuance
-        5. Uninstall cleanly
-
-        Note: Coupang API calls are mocked
-        """
-        # Step 1: Install service
-        credentials = {
-            'access_key': 'test-key',
-            'secret_key': 'test-secret',
-            'user_id': 'test-user',
-            'vendor_id': 'test-vendor'
-        }
-
+    def test_complete_workflow(self, clean_container, container_exec, test_excel_file):
+        """Test complete workflow from install to uninstall"""
+        # 1. Install
         install_cmd = (
-            f"cd /app && python3 main.py install "
-            f"--access-key {credentials['access_key']} "
-            f"--secret-key {credentials['secret_key']} "
-            f"--user-id {credentials['user_id']} "
-            f"--vendor-id {credentials['vendor_id']}"
+            "cd /app && "
+            "python3 main.py install "
+            "--access-key test-access "
+            "--secret-key test-secret "
+            "--user-id test-user "
+            "--vendor-id test-vendor"
         )
+        exit_code, output = container_exec(install_cmd, check=True)
+        assert "설치 완료" in output
 
-        install_result = container_exec(install_cmd, check=False)
-        assert install_result['exit_code'] == 0 or "설치 완료" in install_result['stdout'], \
-            "Installation should succeed"
+        # 2. Verify cron job was created
+        exit_code, crontab_output = container_exec("crontab -l")
+        assert exit_code == 0
+        assert "# coupang_coupon_issuer_job" in crontab_output
+        assert "main.py issue" in crontab_output
 
-        # Step 2: Apply Excel file
-        excel_path = mock_excel_in_container('valid')
+        # 3. Copy test Excel to container
+        # (In real scenario, user would run 'apply' command)
+        # For testing, we'll just verify the command structure
 
-        # Verify Excel exists
-        excel_check = container_exec(f"test -f {excel_path}", check=False)
-        assert excel_check['exit_code'] == 0, "Excel file should exist after apply"
+        # 4. Verify global command works
+        exit_code, output = container_exec("which coupang_coupon_issuer")
+        assert exit_code == 0
+        assert "/usr/local/bin/coupang_coupon_issuer" in output
 
-        # Step 3: Verify service is running
-        service_status = container_exec(
-            "systemctl status coupang_coupon_issuer --no-pager",
-            check=False
-        )
+        # 5. Verify log directory exists
+        exit_code, _ = container_exec("test -d /root/.local/state/coupang_coupon_issuer")
+        assert exit_code == 0
 
-        # Service may be active or failed (expected without scheduler running)
-        assert 'coupang_coupon_issuer.service' in service_status['stdout']
+        # 6. Verify log file exists
+        exit_code, _ = container_exec("test -f /root/.local/state/coupang_coupon_issuer/issuer.log")
+        assert exit_code == 0
 
-        # Step 4: Manually trigger issue command
-        # Note: We can't actually issue coupons to real API, but we can test the command exists
-        issue_cmd_check = container_exec(
-            "/usr/local/bin/coupang_coupon_issuer --help || true",
-            check=False
-        )
+        # 7. Uninstall (say 'y' to all)
+        uninstall_cmd = "cd /app && echo -e 'y\\ny\\ny\\ny' | python3 main.py uninstall"
+        exit_code, output = container_exec(uninstall_cmd)
+        assert "제거 완료" in output
 
-        # Command should exist (even if help fails)
-        # Just verify no "command not found" error
+        # 8. Verify cron job was removed
+        exit_code, crontab_output = container_exec("crontab -l || true")
+        assert "# coupang_coupon_issuer_job" not in crontab_output
 
-        # Step 5: Uninstall cleanly
-        uninstall_cmd = "cd /app && echo 'y\ny\ny' | python3 main.py uninstall"
-        uninstall_result = container_exec(uninstall_cmd, check=False)
+    def test_cron_schedule_accuracy(self, installed_service):
+        """Verify cron schedule is set to midnight (00:00)"""
+        exec_fn = installed_service["exec"]
 
-        assert uninstall_result['exit_code'] == 0 or "제거 완료" in uninstall_result['stdout']
+        exit_code, output = exec_fn("crontab -l")
+        assert exit_code == 0
 
-        # Verify cleanup
-        assert container_exec("test -f /etc/systemd/system/coupang_coupon_issuer.service", check=False)['exit_code'] != 0
-        assert container_exec("test -L /usr/local/bin/coupang_coupon_issuer", check=False)['exit_code'] != 0
-        assert container_exec("test -d /opt/coupang_coupon_issuer", check=False)['exit_code'] != 0
+        # Parse cron line
+        for line in output.split('\n'):
+            if "# coupang_coupon_issuer_job" in line:
+                # Format: 0 0 * * * command
+                parts = line.split()
+                assert parts[0] == "0"  # minute
+                assert parts[1] == "0"  # hour
+                assert parts[2] == "*"  # day of month
+                assert parts[3] == "*"  # month
+                assert parts[4] == "*"  # day of week
+                break
+        else:
+            pytest.fail("Cron job not found")
 
-    def test_service_restart_and_recovery(
-        self, installed_service, container_exec
-    ):
-        """
-        Test service restart and recovery.
+    def test_log_redirection_in_cron_job(self, installed_service):
+        """Verify cron job redirects output to log file"""
+        exec_fn = installed_service["exec"]
 
-        Verifies:
-        1. Service can be stopped manually
-        2. Service can be restarted
-        3. Service state persists after restart
-        """
-        # Stop service
-        stop_result = container_exec("systemctl stop coupang_coupon_issuer", check=False)
+        exit_code, output = exec_fn("crontab -l")
+        assert exit_code == 0
 
-        # Verify service is stopped
-        status_result = container_exec(
-            "systemctl is-active coupang_coupon_issuer",
-            check=False
-        )
-        assert status_result['exit_code'] != 0 or 'inactive' in status_result['stdout']
-
-        # Restart service
-        restart_result = container_exec("systemctl restart coupang_coupon_issuer", check=False)
-
-        # Verify service exists (may be active or failed)
-        status_after = container_exec(
-            "systemctl status coupang_coupon_issuer --no-pager",
-            check=False
-        )
-        assert 'coupang_coupon_issuer.service' in status_after['stdout']
-
-    def test_multi_coupon_issuance_with_mixed_results(
-        self, installed_service, container_exec, mock_excel_in_container, requests_mock
-    ):
-        """
-        Test multi-coupon issuance with some successes and failures.
-
-        Verifies:
-        1. Multiple coupons can be processed
-        2. Log output shows both [OK] and [FAIL] markers
-        3. Summary shows correct counts
-
-        Note: This is a complex scenario that requires mocking API responses
-        """
-        # Create Excel with multiple coupons
-        excel_path = mock_excel_in_container('valid')
-
-        # Since we're in a container, we can't easily use requests_mock
-        # This test is more conceptual - in real scenario, you'd need to:
-        # 1. Mock Coupang API endpoints
-        # 2. Run issue command
-        # 3. Verify logs via journalctl
-
-        # For now, just verify the setup is correct
-        excel_check = container_exec(f"test -f {excel_path}", check=False)
-        assert excel_check['exit_code'] == 0
-
-        # Verify credentials exist
-        creds_check = container_exec(
-            f"test -f {installed_service['config_dir']}/credentials.json",
-            check=False
-        )
-        assert creds_check['exit_code'] == 0
+        # Verify output redirection
+        assert ">> /root/.local/state/coupang_coupon_issuer/issuer.log" in output
+        assert "2>&1" in output  # stderr also redirected

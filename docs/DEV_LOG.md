@@ -230,3 +230,125 @@ uv run pytest tests/integration -v -m integration
 - **통합 테스트**: 35개 (신규)
 - **전체**: 144개
 - **Windows 통과율**: 97/109 (89%, service.py 12개 스킵)
+
+### Crontab 마이그레이션 (ADR 010)
+
+**배경**: systemd 기반 통합 테스트가 testcontainers에서 불안정하여 실제 환경 동작 확신 불가. 단순화 필요.
+
+**주요 변경사항**:
+- **제거**: scheduler.py (108 라인), serve 명령어
+- **대체**: SystemdService → CrontabService (221 → 419 라인)
+- **로그 변경**: journalctl → `~/.local/state/coupang_coupon_issuer/issuer.log`
+- **스케줄링**: 30초 폴링 루프 → cron 1분 정밀도 (00:00 정확히 실행)
+
+### Cron Job 관리 규칙
+
+**마커 기반 식별**:
+- 마커: `# coupang_coupon_issuer_job`
+- cron job 추가/제거 시 마커로만 판단
+- 복잡한 조건 사용 금지 (마커 존재 여부만 체크)
+
+**Cron Job 형식**:
+```bash
+0 0 * * * /usr/bin/python3 /opt/coupang_coupon_issuer/main.py issue >> ~/.local/state/coupang_coupon_issuer/issuer.log 2>&1  # coupang_coupon_issuer_job
+```
+
+**Crontab 조작**:
+- 읽기: `subprocess.run(["crontab", "-l"], ...)`
+- 쓰기: `subprocess.run(["crontab", "-"], input=new_crontab, ...)`
+- 업데이트: 기존 job 제거 후 새 job 추가
+- 제거: 마커 포함 라인만 필터링
+
+### 플랫폼별 Cron 설치
+
+**자동 감지 및 설치**:
+- Ubuntu/Debian: `apt-get install cron`
+- RHEL/CentOS 8+: `dnf install cronie`
+- RHEL/CentOS 7: `yum install cronie`
+- 미지원 시스템: 에러 메시지 + 수동 설치 안내
+
+**Cron 활성화**:
+- systemctl 우선 시도 (cron, crond 두 서비스명 모두 시도)
+- 없으면 service 명령어 사용
+- 실패 시 경고만 출력 (치명적이지 않음)
+
+### 로그 디렉토리 규칙
+
+**사용자 수준 로그**:
+- 경로: `~/.local/state/coupang_coupon_issuer/` (XDG Base Directory 표준)
+- 파일: `issuer.log`
+- 권한: 0o755 (디렉토리), 0o644 (파일)
+- sudo 불필요 (사용자가 직접 tail -f로 확인 가능)
+
+### 서비스 관리 명령어 변경
+
+**Before (systemd)**:
+```bash
+systemctl status coupang_coupon_issuer
+journalctl -u coupang_coupon_issuer --since "1 hour ago"
+```
+
+**After (cron)**:
+```bash
+crontab -l  # 스케줄 확인
+tail -f ~/.local/state/coupang_coupon_issuer/issuer.log  # 로그 확인
+```
+
+### 코드 구조 변화
+
+**파일 삭제**:
+- scheduler.py (108 라인): 30초 폴링 루프 제거
+
+**config.py 변경**:
+- 삭제: `CHECK_INTERVAL = 30` (scheduler 제거로 불필요)
+- 추가: `LOG_DIR`, `LOG_FILE` (사용자 수준 로그)
+
+**main.py 변경**:
+- serve 명령어 제거 (cron이 스케줄링 담당)
+- import 수정: SystemdService → CrontabService
+- help 텍스트: systemd → cron 명령어
+
+**service.py 재작성**:
+- CrontabService 클래스 (419 라인)
+- 주요 메서드:
+  - `_detect_cron_system()`: cron 설치 여부 확인
+  - `_get_package_manager()`: apt/dnf/yum 감지
+  - `_install_cron()`: 플랫폼별 cron 설치
+  - `_enable_cron_service()`: cron 데몬 활성화
+  - `_get_current_crontab()`: crontab 읽기
+  - `_add_cron_job()`: job 추가/업데이트
+  - `_remove_cron_job()`: job 제거
+
+### 테스트 변경
+
+**유닛 테스트**:
+- test_scheduler.py 삭제 (scheduler 제거)
+- test_service.py 완전 재작성 (CrontabService 테스트, 28개)
+  - 8개 테스트 클래스: Root permission, Cron detection, Package manager, Installation, Service enable, Crontab operations, Install/Uninstall
+- test_cli.py 업데이트 (serve 테스트 제거)
+- test_config.py 업데이트 (CHECK_INTERVAL → LOG_DIR/LOG_FILE)
+
+**통합 테스트 재작성** (348 라인 → 520 라인):
+- conftest.py 단순화 (200 라인)
+  - privileged mode 제거, cgroup 마운트 제거, /sbin/init 제거
+  - Fixtures: cron_container, clean_container, container_exec, installed_service, test_excel_file
+- test_service_install.py 재작성 (11개 테스트)
+  - Cron job 생성, 로그 디렉토리, 파일 복사, symlink, credentials, 중복 설치
+- test_service_uninstall.py 재작성 (7개 테스트)
+  - Cron job 제거, symlink 제거, 파일 삭제 프롬프트 (y/n 응답별)
+- test_end_to_end.py 재작성 (3개 테스트)
+  - 완전한 워크플로우, cron 스케줄 정확성, 로그 리다이렉션
+
+**테스트 개수 변화**:
+- 유닛 테스트: 109개 → 95개 (scheduler 14개 삭제, service 8개 추가)
+- 통합 테스트: 35개 → 21개 (단순화)
+
+### 마이그레이션 가이드
+
+**기존 systemd 사용자**:
+1. `sudo coupang_coupon_issuer uninstall` (systemd 제거)
+2. `sudo coupang_coupon_issuer install ...` (cron 재설치)
+3. 기존 credentials/excel 재사용 가능
+4. 로그 위치 변경: journalctl → `~/.local/state/...`
+
+---

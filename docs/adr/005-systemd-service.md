@@ -1,6 +1,12 @@
 # ADR 005: Linux systemd 서비스
 
-**상태**: 승인됨
+> **⚠️ DEPRECATED**: 이 ADR은 ADR 010 (crontab-service)로 대체되었습니다.
+>
+> 날짜: 2024-12-19
+> 사유: systemd 복잡도 및 테스트 불안정성
+> 참조: [ADR 010: Crontab 기반 스케줄링](./010-crontab-service.md)
+
+**상태**: ~~승인됨~~ **대체됨**
 **날짜**: 2024-12-16
 **결정자**: 프로젝트 오너
 

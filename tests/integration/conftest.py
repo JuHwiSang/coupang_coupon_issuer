@@ -1,38 +1,34 @@
 """
 Integration test fixtures using testcontainers.
 
-Provides fixtures for running tests in actual Ubuntu 22.04 + systemd container.
+Provides fixtures for running tests in actual Ubuntu 22.04 + cron container.
+Much simpler than systemd version - no privileged mode or cgroup mounts needed.
 """
 
 import json
 import pytest
-import time
 from pathlib import Path
 from testcontainers.core.container import DockerContainer
 
 
 @pytest.fixture(scope="session")
-def systemd_container():
+def cron_container():
     """
-    Create Ubuntu 22.04 container with systemd enabled.
+    Create Ubuntu 22.04 container with cron installed.
 
     Features:
-    - Privileged mode for systemd support
     - Volume mount for project code at /app
-    - cgroup volume for systemd
-    - Waits for systemd initialization
-    - Pre-installs Python 3, pip, and project dependencies
+    - Pre-installs Python 3, pip, cron, and project dependencies
+    - No privileged mode required (simpler than systemd)
 
     Returns:
-        DockerContainer: Running container with systemd
+        DockerContainer: Running container with cron
     """
     project_root = Path(__file__).parent.parent.parent
 
     container = DockerContainer("ubuntu:22.04")
-    container.with_command("/sbin/init")
-
-    # Enable privileged mode for systemd
-    container.with_kwargs(privileged=True)
+    container.with_command("/bin/bash")
+    container.with_kwargs(stdin_open=True, tty=True)
 
     # Mount project code
     container.with_volume_mapping(
@@ -41,25 +37,15 @@ def systemd_container():
         mode="rw"
     )
 
-    # Mount cgroup for systemd
-    container.with_volume_mapping(
-        "/sys/fs/cgroup",
-        "/sys/fs/cgroup",
-        mode="ro"
-    )
-
     # Start container
     container.start()
 
-    # Wait for systemd to initialize
-    print("Waiting for systemd to initialize...", flush=True)
-    time.sleep(5)
-
-    # Install system dependencies
+    # Install system dependencies (including cron)
     print("Installing system dependencies...", flush=True)
-    exit_code, output = container.exec(
-        "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-pip sudo"
-    )
+    exit_code, output = container.exec([
+        "bash", "-c",
+        "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-pip sudo cron"
+    ])
 
     if exit_code != 0:
         print(f"WARNING: apt-get failed with code {exit_code}", flush=True)
@@ -67,92 +53,95 @@ def systemd_container():
 
     # Install Python packages
     print("Installing Python packages...", flush=True)
-    exit_code, output = container.exec(
-        "python3 -m pip install requests openpyxl pytest --break-system-packages"
-    )
+    exit_code, output = container.exec([
+        "bash", "-c",
+        "python3 -m pip install requests openpyxl pytest"
+    ])
 
     if exit_code != 0:
         print(f"WARNING: pip install failed with code {exit_code}", flush=True)
-        print(f"Output: {output.decode('utf-8') if output else 'N/A'}", flush=True)
 
-    # Verify systemd is running
-    exit_code, output = container.exec("systemctl is-system-running")
-    print(f"systemd status: {output.decode('utf-8').strip() if output else 'unknown'}", flush=True)
+    # Start cron service
+    print("Starting cron service...", flush=True)
+    exit_code, output = container.exec(["bash", "-c", "service cron start"])
+
+    if exit_code != 0:
+        print(f"WARNING: cron start failed with code {exit_code}", flush=True)
+
+    print("Container setup complete", flush=True)
 
     yield container
 
     # Cleanup
+    print("Stopping container...", flush=True)
     container.stop()
 
 
 @pytest.fixture(scope="function")
-def clean_container(systemd_container):
+def clean_container(cron_container):
     """
-    Ensure clean state before each test.
+    Clean up container state before each test.
 
     Removes:
-    - Installed service files
-    - /opt/coupang_coupon_issuer directory
-    - /etc/coupang_coupon_issuer directory
-    - Symlinks in /usr/local/bin
+    - Cron jobs (crontab -r)
+    - Installed files (/opt, /etc, /usr/local/bin)
+    - Log directory
 
     Args:
-        systemd_container: Session-scoped container fixture
+        cron_container: The running cron container
 
-    Yields:
-        DockerContainer: Cleaned container ready for testing
+    Returns:
+        DockerContainer: Cleaned container
     """
-    cleanup_script = """
-    systemctl stop coupang_coupon_issuer 2>/dev/null || true
-    systemctl disable coupang_coupon_issuer 2>/dev/null || true
-    rm -f /etc/systemd/system/coupang_coupon_issuer.service
-    rm -rf /opt/coupang_coupon_issuer
-    rm -rf /etc/coupang_coupon_issuer
-    rm -f /usr/local/bin/coupang_coupon_issuer
-    systemctl daemon-reload 2>/dev/null || true
-    """
+    # Remove cron jobs (ignore errors if no crontab exists)
+    cron_container.exec(["bash", "-c", "crontab -r || true"])
 
-    systemd_container.exec(f"bash -c '{cleanup_script}'")
+    # Remove installed files
+    cron_container.exec(["bash", "-c", "rm -rf /opt/coupang_coupon_issuer"])
+    cron_container.exec(["bash", "-c", "rm -rf /etc/coupang_coupon_issuer"])
+    cron_container.exec(["bash", "-c", "rm -f /usr/local/bin/coupang_coupon_issuer"])
+    cron_container.exec(["bash", "-c", "rm -rf /root/.local/state/coupang_coupon_issuer"])
 
-    yield systemd_container
+    yield cron_container
 
 
 @pytest.fixture
-def container_exec(clean_container):
+def container_exec(cron_container):
     """
-    Helper to execute commands in container with better error handling.
+    Helper to execute commands in container and check results.
 
-    Returns a callable that executes commands and captures output.
+    Usage:
+        container_exec("ls /opt", check=True)
 
     Args:
-        clean_container: Function-scoped cleaned container
+        cron_container: The running cron container
 
     Returns:
-        Callable[[str, bool], dict]: Function to execute commands
-            - command: Shell command to execute
-            - check: If True, raises RuntimeError on non-zero exit code
-
-    Example:
-        result = container_exec("ls /opt")
-        print(result['stdout'])
+        Function that executes commands
     """
-    def _exec(command, check=True):
-        """Execute command in container"""
-        exit_code, output = clean_container.exec(f"bash -c '{command}'")
+    def _exec(command, check=False):
+        """
+        Execute command in container.
 
-        stdout = output.decode('utf-8') if output else ''
+        Args:
+            command: Command to execute
+            check: If True, raise exception on non-zero exit code
+
+        Returns:
+            Tuple of (exit_code, output_str)
+        """
+        # Wrap command in bash -c to support shell features (cd, &&, etc.)
+        exit_code, output = cron_container.exec(["bash", "-c", command])
+        output_str = output.decode('utf-8') if output else ""
 
         if check and exit_code != 0:
             raise RuntimeError(
                 f"Command failed with exit code {exit_code}\n"
                 f"Command: {command}\n"
-                f"Output: {stdout}"
+                f"Output: {output_str}"
             )
 
-        return {
-            'exit_code': exit_code,
-            'stdout': stdout,
-        }
+        return exit_code, output_str
 
     return _exec
 
@@ -160,184 +149,61 @@ def container_exec(clean_container):
 @pytest.fixture
 def installed_service(clean_container, container_exec):
     """
-    Install service in container and return installation state.
-
-    Executes: python3 main.py install --access-key ... --secret-key ... --user-id ... --vendor-id ...
-
-    Args:
-        clean_container: Cleaned container
-        container_exec: Command execution helper
+    Install coupang_coupon_issuer service in container.
 
     Returns:
-        dict: Installation information
+        Dict with installation info:
+            - container: DockerContainer
+            - exec: container_exec function
             - credentials: dict with access_key, secret_key, user_id, vendor_id
-            - install_dir: Path to /opt/coupang_coupon_issuer
-            - config_dir: Path to /etc/coupang_coupon_issuer
-            - symlink: Path to /usr/local/bin/coupang_coupon_issuer
-
-    Example:
-        info = installed_service
-        assert Path(info['install_dir']) / 'main.py').exists()
     """
-    credentials = {
-        'access_key': 'test-access-key',
-        'secret_key': 'test-secret-key',
-        'user_id': 'test-user-id',
-        'vendor_id': 'test-vendor-id'
-    }
-
+    # Install service
     install_cmd = (
-        f"cd /app && python3 main.py install "
-        f"--access-key {credentials['access_key']} "
-        f"--secret-key {credentials['secret_key']} "
-        f"--user-id {credentials['user_id']} "
-        f"--vendor-id {credentials['vendor_id']}"
+        "cd /app && "
+        "python3 main.py install "
+        "--access-key test-access "
+        "--secret-key test-secret "
+        "--user-id test-user "
+        "--vendor-id test-vendor"
     )
 
-    container_exec(install_cmd)
+    container_exec(install_cmd, check=True)
 
     return {
-        'credentials': credentials,
-        'install_dir': '/opt/coupang_coupon_issuer',
-        'config_dir': '/etc/coupang_coupon_issuer',
-        'symlink': '/usr/local/bin/coupang_coupon_issuer'
+        "container": clean_container,
+        "exec": container_exec,
+        "credentials": {
+            "access_key": "test-access",
+            "secret_key": "test-secret",
+            "user_id": "test-user",
+            "vendor_id": "test-vendor"
+        }
     }
 
 
 @pytest.fixture
-def file_permission_checker(container_exec):
+def test_excel_file(tmp_path):
     """
-    Helper to check file permissions in container.
-
-    Args:
-        container_exec: Command execution helper
+    Create a test Excel file for integration tests.
 
     Returns:
-        Callable[[str], dict]: Function that returns file permissions
-            Returns dict: {'mode': '0755', 'owner': 'root', 'group': 'root'}
-            Returns None if file doesn't exist
-
-    Example:
-        perms = file_permission_checker('/opt/coupang_coupon_issuer')
-        assert perms['mode'] == '755'
-        assert perms['owner'] == 'root'
+        Path to test Excel file
     """
-    def _check(file_path):
-        """Check file permissions using stat"""
-        result = container_exec(f"stat -c '%a %U %G' {file_path}", check=False)
+    from openpyxl import Workbook
 
-        if result['exit_code'] != 0:
-            return None
+    excel_file = tmp_path / "test_coupons.xlsx"
 
-        parts = result['stdout'].strip().split()
+    wb = Workbook()
+    ws = wb.active
+    assert ws is not None
 
-        if len(parts) != 3:
-            return None
+    # Add headers
+    ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수"])
 
-        mode, owner, group = parts
+    # Add test data
+    ws.append(["테스트즉시할인", "즉시할인", 30, "RATE", 10, ""])
+    ws.append(["테스트다운로드", "다운로드쿠폰", 30, "PRICE", 1000, 100])
 
-        return {
-            'mode': mode,
-            'owner': owner,
-            'group': group
-        }
+    wb.save(excel_file)
 
-    return _check
-
-
-@pytest.fixture
-def verify_systemd_unit(container_exec):
-    """
-    Helper to verify systemd unit file properties.
-
-    Args:
-        container_exec: Command execution helper
-
-    Returns:
-        Callable[[str], dict]: Function that returns systemd unit properties
-            Returns dict with systemd properties
-            Returns {'exists': False} if service doesn't exist
-
-    Example:
-        props = verify_systemd_unit('coupang_coupon_issuer')
-        assert props['ActiveState'] == 'active'
-    """
-    def _verify(service_name):
-        """Verify systemd unit properties"""
-        # Check if service exists
-        result = container_exec(
-            f"systemctl show {service_name} --no-pager",
-            check=False
-        )
-
-        if result['exit_code'] != 0:
-            return {'exists': False}
-
-        # Parse properties
-        properties = {'exists': True}
-        for line in result['stdout'].split('\n'):
-            if '=' in line:
-                key, value = line.split('=', 1)
-                properties[key] = value
-
-        return properties
-
-    return _verify
-
-
-@pytest.fixture
-def mock_user_input(mocker):
-    """
-    Mock builtins.input for uninstall prompts.
-
-    Args:
-        mocker: pytest-mock mocker fixture
-
-    Returns:
-        Callable[[list], Mock]: Function to set up input mock
-            Takes list of responses (e.g., ['y', 'n', 'y'])
-
-    Example:
-        mock_user_input(['y', 'n', 'y'])
-        # First call to input() returns 'y'
-        # Second call returns 'n'
-        # Third call returns 'y'
-    """
-    def _mock(responses):
-        """Set up input mock with given responses"""
-        return mocker.patch('builtins.input', side_effect=responses)
-
-    return _mock
-
-
-@pytest.fixture
-def mock_excel_in_container(clean_container, container_exec):
-    """
-    Create a test Excel file inside the container at /etc/coupang_coupon_issuer/coupons.xlsx
-
-    Args:
-        clean_container: Cleaned container
-        container_exec: Command execution helper
-
-    Returns:
-        Callable[[str], str]: Function to create Excel file
-            - content_type: 'valid', 'invalid_columns', 'invalid_rates', 'invalid_prices'
-            Returns path to created file
-
-    Example:
-        excel_path = mock_excel_in_container('valid')
-        # Creates /etc/coupang_coupon_issuer/coupons.xlsx with valid test data
-    """
-    def _create_excel(content_type='valid'):
-        """Copy fixture Excel file to container"""
-        # Copy fixture from host to container
-        fixture_path = f"/app/tests/fixtures/sample_{content_type}.xlsx"
-        target_path = "/etc/coupang_coupon_issuer/coupons.xlsx"
-
-        container_exec("mkdir -p /etc/coupang_coupon_issuer")
-        container_exec(f"cp {fixture_path} {target_path}")
-        container_exec(f"chmod 600 {target_path}")
-
-        return target_path
-
-    return _create_excel
+    return excel_file

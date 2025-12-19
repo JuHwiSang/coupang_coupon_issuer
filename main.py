@@ -19,8 +19,7 @@ from openpyxl import load_workbook
 
 from src.coupang_coupon_issuer.config import CredentialManager
 from src.coupang_coupon_issuer.issuer import CouponIssuer
-from src.coupang_coupon_issuer.scheduler import MidnightScheduler
-from src.coupang_coupon_issuer.service import SystemdService
+from src.coupang_coupon_issuer.service import CrontabService
 
 
 def cmd_apply(args) -> None:
@@ -172,29 +171,8 @@ def cmd_issue() -> None:
         sys.exit(1)
 
 
-def cmd_serve() -> None:
-    """스케줄러 실행 (서비스 모드)"""
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 서비스 시작 중...", flush=True)
-
-    # API 키를 파일에서 로드하여 환경 변수로 설정
-    try:
-        CredentialManager.load_credentials_to_env()
-    except Exception as e:
-        print(f"ERROR: API 키 로드 실패: {e}", flush=True)
-        sys.exit(1)
-
-    # 쿠폰 발급 함수 정의
-    def issue_task():
-        issuer = CouponIssuer()
-        issuer.issue()
-
-    # 스케줄러 시작
-    scheduler = MidnightScheduler(issue_task)
-    scheduler.run()
-
-
 def cmd_install(args) -> None:
-    """systemd 서비스 설치"""
+    """Cron 기반 서비스 설치"""
     # 4개 파라미터 모두 필수
     if not all([args.access_key, args.secret_key, args.user_id, args.vendor_id]):
         print("ERROR: 모든 인자가 필요합니다.", flush=True)
@@ -205,12 +183,12 @@ def cmd_install(args) -> None:
         print("  --vendor-id   : 판매자 ID", flush=True)
         sys.exit(1)
 
-    SystemdService.install(args.access_key, args.secret_key, args.user_id, args.vendor_id)
+    CrontabService.install(args.access_key, args.secret_key, args.user_id, args.vendor_id)
 
 
 def cmd_uninstall() -> None:
-    """systemd 서비스 제거"""
-    SystemdService.uninstall()
+    """Cron 기반 서비스 제거"""
+    CrontabService.uninstall()
 
 
 def main() -> None:
@@ -233,15 +211,12 @@ def main() -> None:
     --user-id YOUR_USER_ID \\
     --vendor-id YOUR_VENDOR_ID
 
-  # 4. 스케줄러 실행 (일반적으로 systemd가 자동 실행)
-  coupang_coupon_issuer serve
-
-  # 5. 서비스 제거
+  # 4. 서비스 제거
   sudo coupang_coupon_issuer uninstall
 
 서비스 관리:
-  systemctl status coupang_coupon_issuer   # 상태 확인
-  journalctl -u coupang_coupon_issuer -f   # 로그 확인
+  crontab -l                                              # 스케줄 확인
+  tail -f ~/.local/state/coupang_coupon_issuer/issuer.log # 로그 확인
         """
     )
 
@@ -254,18 +229,15 @@ def main() -> None:
     # issue 서브파서
     subparsers.add_parser("issue", help="단발성 쿠폰 발급 (즉시 실행)")
 
-    # serve 서브파서 (기존 run 대체)
-    subparsers.add_parser("serve", help="스케줄러 실행 (systemd용)")
-
     # install 파서에 user_id, vendor_id 추가
-    install_parser = subparsers.add_parser("install", help="systemd 서비스 설치")
+    install_parser = subparsers.add_parser("install", help="Cron 기반 서비스 설치")
     install_parser.add_argument("--access-key", required=True, help="Coupang Access Key")
     install_parser.add_argument("--secret-key", required=True, help="Coupang Secret Key")
     install_parser.add_argument("--user-id", required=True, help="WING 사용자 ID")
     install_parser.add_argument("--vendor-id", required=True, help="판매자 ID")
 
     # uninstall 파서 (변경 없음)
-    subparsers.add_parser("uninstall", help="systemd 서비스 제거")
+    subparsers.add_parser("uninstall", help="Cron 기반 서비스 제거")
 
     args = parser.parse_args()
 
@@ -278,8 +250,6 @@ def main() -> None:
         cmd_apply(args)
     elif args.command == "issue":
         cmd_issue()
-    elif args.command == "serve":
-        cmd_serve()
     elif args.command == "install":
         cmd_install(args)
     elif args.command == "uninstall":
