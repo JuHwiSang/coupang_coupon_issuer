@@ -158,8 +158,8 @@
 
 ### 통합 테스트 추가 (testcontainers)
 
-- **목적**: service.py의 Linux/systemd 의존 코드 테스트
-- **환경**: Ubuntu 22.04 + systemd in Docker container
+- **목적**: service.py의 Linux/cron 의존 코드 테스트
+- **환경**: Ubuntu 22.04 + cron in Docker container
 - **라이브러리**: testcontainers-python
 - **실행 환경**: Docker Desktop (WSL2 backend on Windows)
 
@@ -167,29 +167,28 @@
 
 ```
 tests/integration/
-├── conftest.py               # testcontainers 인프라 (250 라인)
-├── test_service_install.py   # 설치 프로세스 (14개 테스트)
-├── test_service_uninstall.py # 제거 프로세스 (18개 테스트)
+├── conftest.py               # testcontainers 인프라 (207 라인)
+├── test_service_install.py   # 설치 프로세스 (11개 테스트)
+├── test_service_uninstall.py # 제거 프로세스 (6개 테스트)
 └── test_end_to_end.py        # E2E 워크플로우 (3개 테스트)
 ```
 
-### testcontainers 핵심 픽스처
+### testcontainers 핵심 픽스처 (Cron 기반)
 
-1. **systemd_container** (session scope)
+1. **cron_container** (session scope)
    - Ubuntu 22.04 컨테이너 생성
-   - privileged=True로 systemd 활성화
+   - cron, Python 3, pip 자동 설치
    - 프로젝트 코드 /app에 마운트
-   - Python 3, pip, sudo 자동 설치
-   - 5초 systemd 초기화 대기
+   - privileged mode 불필요 (systemd보다 단순)
 
 2. **clean_container** (function scope)
    - 각 테스트 전 서비스/파일 정리
-   - systemctl stop/disable
-   - /opt, /etc, /usr/local/bin 정리
-   - systemctl daemon-reload
+   - crontab -r (cron job 제거)
+   - /opt, /etc, /usr/local/bin, ~/.local/state 정리
 
 3. **container_exec**
    - 컨테이너 내 명령 실행 헬퍼
+   - `["bash", "-c", "command"]` 형식으로 쉘 기능 지원
    - exit code와 stdout 반환
    - 에러 시 자동 예외 발생
 
@@ -197,24 +196,27 @@ tests/integration/
    - 서비스 설치 상태 제공
    - credentials, 경로 정보 반환
 
-5. **file_permission_checker**
-   - stat로 파일 권한 확인
-   - mode, owner, group 반환
-
-6. **verify_systemd_unit**
-   - systemctl show로 서비스 속성 검증
+5. **test_excel_file**
+   - 테스트용 엑셀 파일 생성
+   - 6컬럼 구조 (ADR 009)
 
 ### 통합 테스트 실행 방법
 
 ```bash
 # Docker Desktop 실행 후
 uv run pytest tests/integration -v -m integration
+
+# 전체 테스트 (유닛 + 통합)
+uv run pytest -v
 ```
 
-### 통합 테스트 커버리지 목표
+### 통합 테스트 결과 (2024-12-19)
 
-- **service.py**: 9% → 90%+ (180 라인)
-- **전체**: 70% → 85%+
+- **테스트 개수**: 20개 (100% 통과)
+- **실행 시간**: 103초
+- **주요 수정사항**:
+  - Docker exec를 `["bash", "-c", "command"]` 형식으로 수정 (쉘 기능 지원)
+  - service.py 경로 계산 로직 수정 (`project_root` 명확화)
 
 ### 유닛 테스트 개선
 

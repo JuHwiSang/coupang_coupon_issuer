@@ -200,18 +200,21 @@ cat ~/.local/state/coupang_coupon_issuer/issuer.log | grep ERROR
   - **테스트 실행**: `uv run pytest tests/unit -v`
   - **커버리지 확인**: `uv run pytest --cov=src/coupang_coupon_issuer`
 
-- [x] 통합 테스트 재작성 완료 (cron 기반)
-  - **통합 테스트**: 21개 (systemd 35개 → cron 21개로 단순화)
+- [x] 통합 테스트 재작성 및 실행 완료 (cron 기반)
+  - **통합 테스트**: 20개 (systemd 35개 → cron 20개로 단순화)
     - test_service_install.py: 11개 테스트 (cron job, 파일, credentials)
-    - test_service_uninstall.py: 7개 테스트 (cron job 제거, 파일 삭제 프롬프트)
+    - test_service_uninstall.py: 6개 테스트 (cron job 제거, 파일 삭제 프롬프트)
     - test_end_to_end.py: 3개 테스트 (E2E 워크플로우, 스케줄 정확성)
   - **testcontainers 인프라**: Ubuntu 22.04 + cron (privileged mode 불필요)
-  - **conftest.py**: 200 라인 (기존 348 라인에서 단순화)
+  - **conftest.py**: 207 라인 (기존 348 라인에서 단순화)
   - **실행 환경**: Docker Desktop 필요 (WSL2 backend)
   - **테스트 실행**: `uv run pytest tests/integration -v -m integration`
+  - **테스트 결과** (2024-12-19): ✅ 20/20 통과 (100%, 103초)
+  - **주요 수정사항**:
+    - Docker exec 명령어를 `["bash", "-c", "command"]` 형식으로 수정 (쉘 기능 지원)
+    - service.py 경로 계산 로직 수정 (project_root 명확화)
 
 ### 향후 작업
-- [ ] 통합 테스트 실제 실행 및 검증 (Linux/Docker 환경)
 - [ ] 성능 최적화 (병렬 처리, 선택사항)
 
 ## 테스트 가이드
@@ -226,16 +229,16 @@ tests/
 │   ├── sample_invalid_columns.xlsx
 │   ├── sample_invalid_rates.xlsx
 │   └── sample_invalid_prices.xlsx
-├── unit/                         # 유닛 테스트 (109개)
-│   ├── test_config.py            # CredentialManager 테스트 (17개)
+├── unit/                         # 유닛 테스트 (108개)
+│   ├── test_config.py            # CredentialManager 테스트 (18개)
 │   ├── test_coupang_api.py       # API 클라이언트 + HMAC (12개)
-│   ├── test_issuer.py            # 쿠폰 발급 로직 (32개, 12개 엣지 케이스 추가)
-│   ├── test_service.py           # Cron 관리 (재작성 필요, Linux only)
-│   └── test_cli.py               # CLI 명령어 (20개)
-└── integration/                  # 통합 테스트 (35개, Docker 필요)
-    ├── conftest.py               # testcontainers 인프라 (250 라인)
-    ├── test_service_install.py   # 설치 프로세스 (14개)
-    ├── test_service_uninstall.py # 제거 프로세스 (18개)
+│   ├── test_issuer.py            # 쿠폰 발급 로직 (32개)
+│   ├── test_service.py           # Cron 관리 (28개, Linux only)
+│   └── test_cli.py               # CLI 명령어 (18개)
+└── integration/                  # 통합 테스트 (20개, Docker 필요)
+    ├── conftest.py               # testcontainers 인프라 (207 라인)
+    ├── test_service_install.py   # 설치 프로세스 (11개)
+    ├── test_service_uninstall.py # 제거 프로세스 (6개)
     └── test_end_to_end.py        # E2E 워크플로우 (3개)
 ```
 
@@ -261,10 +264,10 @@ uv run pytest tests/unit/test_issuer.py -v
 ### Windows vs Linux 테스트
 
 - **유닛 테스트**:
-  - Windows 환경: 95개 중 83개 실행 (service.py 12개 스킵, scheduler.py 삭제)
-  - Linux 환경: 95개 전부 실행 가능
+  - Windows 환경: 108개 중 80개 실행 (service.py 28개 스킵)
+  - Linux 환경: 108개 전부 실행 가능
 - **통합 테스트**:
-  - Windows: Docker Desktop(WSL2) 필요
+  - Windows: Docker Desktop(WSL2) 필요, 20/20 통과 (103초)
   - Linux: Docker만 필요
   - testcontainers로 Ubuntu 22.04 + cron 컨테이너 실행 (privileged mode 불필요)
 

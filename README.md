@@ -63,12 +63,28 @@ sudo python3 main.py uninstall
 ### Running Tests
 
 ```bash
+# Run unit tests only
+uv run pytest tests/unit -v
+
+# Run integration tests (requires Docker Desktop)
+uv run pytest tests/integration -v -m integration
+
 # Run all tests
-uv run pytest
+uv run pytest -v
 
 # Run with coverage
 uv run pytest --cov=src/coupang_coupon_issuer
 ```
+
+### Test Statistics
+
+- **Unit Tests**: 108 tests
+  - Windows: 80/108 (service.py tests skipped)
+  - Linux: 108/108 (all tests run)
+- **Integration Tests**: 20 tests (Docker required)
+  - 100% pass rate (103 seconds)
+  - Tests cron installation, uninstallation, and E2E workflows
+  - Ubuntu 22.04 container with cron service
 
 ## License
 

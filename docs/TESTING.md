@@ -14,16 +14,16 @@ tests/
 │   ├── sample_invalid_columns.xlsx
 │   ├── sample_invalid_rates.xlsx
 │   └── sample_invalid_prices.xlsx
-├── unit/
-│   ├── test_config.py            # CredentialManager 테스트 (17개)
+├── unit/                         # 유닛 테스트 (108개)
+│   ├── test_config.py            # CredentialManager 테스트 (18개)
 │   ├── test_coupang_api.py       # API 클라이언트 + HMAC (12개)
 │   ├── test_issuer.py            # 쿠폰 발급 로직 (32개)
 │   ├── test_service.py           # Cron 관리 (28개, Linux only)
-│   └── test_cli.py               # CLI 명령어 (20개)
-└── integration/                  # 통합 테스트 (cron 기반)
-    ├── conftest.py               # testcontainers fixture (cron)
+│   └── test_cli.py               # CLI 명령어 (18개)
+└── integration/                  # 통합 테스트 (20개, Docker 필요)
+    ├── conftest.py               # testcontainers fixture (207 라인)
     ├── test_service_install.py   # 설치 프로세스 (11개)
-    ├── test_service_uninstall.py # 제거 프로세스 (7개)
+    ├── test_service_uninstall.py # 제거 프로세스 (6개)
     └── test_end_to_end.py        # E2E 워크플로우 (3개)
 ```
 
@@ -83,20 +83,38 @@ uv run pytest -m "not slow"
 
 ### Windows 환경
 
+**유닛 테스트:**
 - service.py 테스트는 자동 스킵 (Linux 전용)
-- 예상 결과: 79 passed, 12 skipped, 6 failed
+- 예상 결과: 80/108 (28개 스킵)
 
 ```bash
 uv run pytest tests/unit -v
 ```
 
+**통합 테스트:**
+- Docker Desktop 필요 (WSL2 backend)
+- 예상 결과: 20/20 통과 (103초)
+
+```bash
+uv run pytest tests/integration -v -m integration
+```
+
 ### Linux 환경
 
+**유닛 테스트:**
 - 모든 테스트 실행 가능
-- service.py 테스트 포함
+- 예상 결과: 108/108 통과
 
 ```bash
 uv run pytest tests/unit -v
+```
+
+**통합 테스트:**
+- Docker만 필요
+- 예상 결과: 20/20 통과
+
+```bash
+uv run pytest tests/integration -v -m integration
 ```
 
 ## 주요 Fixture
@@ -111,8 +129,8 @@ def temp_credentials(tmp_path):
 
 @pytest.fixture
 def valid_excel(tmp_path):
-    """유효한 5컬럼 엑셀 파일"""
-    # 테스트용 쿠폰 데이터 포함
+    """유효한 6컬럼 엑셀 파일"""
+    # 테스트용 쿠폰 데이터 포함 (ADR 009)
 
 @pytest.fixture
 def mock_coupang_api(requests_mock):
@@ -162,24 +180,58 @@ import os
 pytestmark = pytest.mark.skipif(os.name == 'nt', reason="Linux only")
 ```
 
+## 통합 테스트 (testcontainers)
+
+### 환경
+
+- Ubuntu 22.04 + cron in Docker container
+- testcontainers-python 라이브러리 사용
+- privileged mode 불필요 (cron 기반)
+
+### Fixture 구조
+
+1. **cron_container** (session scope)
+   - Ubuntu 22.04 컨테이너 생성
+   - cron, Python 3, pip 자동 설치
+   - 프로젝트 코드 /app에 마운트
+
+2. **clean_container** (function scope)
+   - 각 테스트 전 정리 (crontab, 파일)
+
+3. **container_exec**
+   - `["bash", "-c", "command"]` 형식으로 쉘 기능 지원
+   - exit code와 stdout 반환
+
+4. **installed_service**
+   - 서비스 설치 상태 제공
+
+5. **test_excel_file**
+   - 테스트용 6컬럼 엑셀 생성
+
+### 실행 결과 (2024-12-19)
+
+- **테스트 개수**: 20개
+- **통과율**: 100%
+- **실행 시간**: 103초
+- **환경**: Docker Desktop (WSL2 backend on Windows)
+
 ## 커버리지 목표
 
-### 현재 커버리지 (Windows 기준)
+### 현재 커버리지
 
-| 모듈 | 커버리지 | 상태 |
-|------|----------|------|
-| config.py | 100% | ✅ |
-| coupang_api.py | 98% | ✅ |
-| issuer.py | 94% | ✅ |
-| cli (main.py) | - | ✅ |
-| service.py | - | ✅ Linux 통합 테스트 |
-
-**전체**: 69%
+| 모듈 | 유닛 테스트 | 통합 테스트 | 상태 |
+|------|------------|------------|------|
+| config.py | 100% | - | ✅ |
+| coupang_api.py | 98% | - | ✅ |
+| issuer.py | 94% | - | ✅ |
+| cli (main.py) | - | 간접 검증 | ✅ |
+| service.py | Linux만 | 100% | ✅ |
 
 ### 목표
 
 - 유닛 테스트: 80% 이상
 - 핵심 모듈 (config, api, issuer): 90% 이상
+- 통합 테스트: 주요 워크플로우 커버
 
 ## 문제 해결
 
