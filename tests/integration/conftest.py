@@ -6,6 +6,7 @@ Tests automatically run on 4 different images (Ubuntu 24.04, 22.04, Debian 13, 1
 
 Key features:
 - Multi-distro testing via pytest parametrize (80 total tests = 20 base × 4 images)
+- Pre-built images for faster test execution (build once, reuse many times)
 - PEP 668 compatibility: automatic --break-system-packages fallback
 - No privileged mode required (simpler than systemd)
 - Supported: Python 3.10+ distributions (Ubuntu 22.04+, Debian 12+*)
@@ -15,8 +16,77 @@ Note: Debian 12 ships with Python 3.11, so it meets the 3.10+ requirement.
 
 import json
 import pytest
+import docker
+import io
 from pathlib import Path
 from testcontainers.core.container import DockerContainer
+
+
+def get_or_build_image(base_image):
+    """
+    Get or build a Docker image with pre-installed dependencies.
+
+    This function checks if a pre-built test image exists. If not, it builds one
+    with all necessary system packages and Python dependencies installed.
+
+    Benefits:
+    - Build once, reuse many times (huge speedup for integration tests)
+    - Source code excluded from image (mounted via volume instead)
+    - PEP 668 compatibility built into image
+
+    Args:
+        base_image: Base image name (e.g., "ubuntu:22.04")
+
+    Returns:
+        str: Tag of the built/existing image
+    """
+    client = docker.from_env()
+    tag = f"coupang-coupon-issuer-test:{base_image.replace(':', '-')}"
+
+    try:
+        # Check if image already exists
+        client.images.get(tag)
+        print(f"Using existing test image: {tag}", flush=True)
+        return tag
+    except docker.errors.ImageNotFound:  # type: ignore[attr-defined]
+        # Build new image with all dependencies
+        print(f"Building test image: {tag}...", flush=True)
+
+        # Determine pip install command based on distro
+        # PEP 668 (Externally Managed Environment) requires --break-system-packages
+        # Ubuntu 24.04, Debian 13, and Debian 12 all require the flag
+        if base_image in ["ubuntu:24.04", "debian:13", "debian:12"]:
+            pip_cmd = "python3 -m pip install --break-system-packages requests openpyxl pytest"
+        else:
+            pip_cmd = "python3 -m pip install requests openpyxl pytest"
+
+        dockerfile_content = f"""FROM {base_image}
+
+# Install system dependencies (including cron)
+RUN apt-get update && \\
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \\
+    python3 \\
+    python3-pip \\
+    sudo \\
+    cron && \\
+    rm -rf /var/lib/apt/lists/*
+
+# Install Python packages
+RUN {pip_cmd}
+
+# Set working directory (project code will be mounted here)
+WORKDIR /app
+
+# Start cron service by default
+CMD ["bash"]
+"""
+
+        # Build image from in-memory Dockerfile
+        f = io.BytesIO(dockerfile_content.encode('utf-8'))
+        client.images.build(fileobj=f, tag=tag, rm=True)
+        print(f"Successfully built test image: {tag}", flush=True)
+
+        return tag
 
 
 @pytest.fixture(
@@ -32,7 +102,7 @@ from testcontainers.core.container import DockerContainer
 )
 def cron_container(request):
     """
-    Create Linux container with cron installed.
+    Create Linux container with cron installed using pre-built image.
     Tests against multiple distributions to ensure compatibility.
 
     Tested images (Python 3.10+ only):
@@ -43,21 +113,25 @@ def cron_container(request):
 
     Features:
     - Volume mount for project code at /app
-    - Pre-installs Python 3, pip, cron, and project dependencies
-    - PEP 668 fallback: retries pip install with --break-system-packages if needed
+    - Uses pre-built image with dependencies (much faster than installing each time)
+    - PEP 668 compatibility built into image
     - No privileged mode required (simpler than systemd)
 
     Returns:
         DockerContainer: Running container with cron and Python 3.10+
     """
-    image = request.param
+    base_image = request.param
     project_root = Path(__file__).parent.parent.parent
 
-    container = DockerContainer(image)
+    # Get or build pre-configured image
+    test_image = get_or_build_image(base_image)
+
+    # Create container from pre-built image
+    container = DockerContainer(test_image)
     container.with_command("/bin/bash")
     container.with_kwargs(stdin_open=True, tty=True)
 
-    # Mount project code
+    # Mount project code (source code not baked into image)
     container.with_volume_mapping(
         str(project_root.resolve()),
         "/app",
@@ -65,46 +139,18 @@ def cron_container(request):
     )
 
     # Start container
+    print(f"Starting container: {base_image}", flush=True)
     container.start()
 
-    # Install system dependencies (including cron)
-    print(f"Setting up container: {image}", flush=True)
-    print("Installing system dependencies...", flush=True)
-    exit_code, output = container.exec([
-        "bash", "-c",
-        "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-pip sudo cron"
-    ])
-
-    if exit_code != 0:
-        print(f"WARNING: apt-get failed with code {exit_code}", flush=True)
-        print(f"Output: {output.decode('utf-8') if output else 'N/A'}", flush=True)
-
-    # Install Python packages
-    print("Installing Python packages...", flush=True)
-    exit_code, output = container.exec([
-        "bash", "-c",
-        "python3 -m pip install requests openpyxl pytest"
-    ])
-
-    # Retry with --break-system-packages if failed (PEP 668)
-    if exit_code != 0:
-        print("Retrying with --break-system-packages...", flush=True)
-        exit_code, output = container.exec([
-            "bash", "-c",
-            "python3 -m pip install --break-system-packages requests openpyxl pytest"
-        ])
-
-        if exit_code != 0:
-            print(f"WARNING: pip install failed with code {exit_code}", flush=True)
-
-    # Start cron service
+    # Start cron service (already installed in image)
     print("Starting cron service...", flush=True)
     exit_code, output = container.exec(["bash", "-c", "service cron start"])
 
     if exit_code != 0:
         print(f"WARNING: cron start failed with code {exit_code}", flush=True)
+        print(f"Output: {output.decode('utf-8') if output else 'N/A'}", flush=True)
 
-    print("Container setup complete", flush=True)
+    print("Container ready", flush=True)
 
     yield container
 
