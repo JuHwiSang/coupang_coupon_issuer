@@ -1,8 +1,16 @@
 """
 Integration test fixtures using testcontainers.
 
-Provides fixtures for running tests in actual Ubuntu 22.04 + cron container.
-Much simpler than systemd version - no privileged mode or cgroup mounts needed.
+Provides fixtures for running tests across multiple Linux distributions with cron.
+Tests automatically run on 4 different images (Ubuntu 24.04, 22.04, Debian 13, 12).
+
+Key features:
+- Multi-distro testing via pytest parametrize (80 total tests = 20 base × 4 images)
+- PEP 668 compatibility: automatic --break-system-packages fallback
+- No privileged mode required (simpler than systemd)
+- Supported: Python 3.10+ distributions (Ubuntu 22.04+, Debian 12+*)
+
+Note: Debian 12 ships with Python 3.11, so it meets the 3.10+ requirement.
 """
 
 import json
@@ -11,22 +19,41 @@ from pathlib import Path
 from testcontainers.core.container import DockerContainer
 
 
-@pytest.fixture(scope="session")
-def cron_container():
+@pytest.fixture(
+    scope="session",
+    params=[
+        "ubuntu:24.04",
+        "ubuntu:22.04",
+        # "ubuntu:20.04",
+        "debian:13",
+        "debian:12",
+        # "debian:11",
+    ]
+)
+def cron_container(request):
     """
-    Create Ubuntu 22.04 container with cron installed.
+    Create Linux container with cron installed.
+    Tests against multiple distributions to ensure compatibility.
+
+    Tested images (Python 3.10+ only):
+    - ubuntu:24.04 (Noble Numbat, Python 3.12)
+    - ubuntu:22.04 (Jammy Jellyfish, Python 3.10)
+    - debian:13 (Trixie, Python 3.12)
+    - debian:12 (Bookworm, Python 3.11)
 
     Features:
     - Volume mount for project code at /app
     - Pre-installs Python 3, pip, cron, and project dependencies
+    - PEP 668 fallback: retries pip install with --break-system-packages if needed
     - No privileged mode required (simpler than systemd)
 
     Returns:
-        DockerContainer: Running container with cron
+        DockerContainer: Running container with cron and Python 3.10+
     """
+    image = request.param
     project_root = Path(__file__).parent.parent.parent
 
-    container = DockerContainer("ubuntu:22.04")
+    container = DockerContainer(image)
     container.with_command("/bin/bash")
     container.with_kwargs(stdin_open=True, tty=True)
 
@@ -41,6 +68,7 @@ def cron_container():
     container.start()
 
     # Install system dependencies (including cron)
+    print(f"Setting up container: {image}", flush=True)
     print("Installing system dependencies...", flush=True)
     exit_code, output = container.exec([
         "bash", "-c",
@@ -58,8 +86,16 @@ def cron_container():
         "python3 -m pip install requests openpyxl pytest"
     ])
 
+    # Retry with --break-system-packages if failed (PEP 668)
     if exit_code != 0:
-        print(f"WARNING: pip install failed with code {exit_code}", flush=True)
+        print("Retrying with --break-system-packages...", flush=True)
+        exit_code, output = container.exec([
+            "bash", "-c",
+            "python3 -m pip install --break-system-packages requests openpyxl pytest"
+        ])
+
+        if exit_code != 0:
+            print(f"WARNING: pip install failed with code {exit_code}", flush=True)
 
     # Start cron service
     print("Starting cron service...", flush=True)

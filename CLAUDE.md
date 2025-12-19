@@ -51,9 +51,18 @@
 ## 환경
 
 - **OS**: Linux (cron 자동 설치)
-- **Python**: 3.10+
+- **Python**: 3.10+ (필수)
 - **패키지**: requests, openpyxl
 - **로깅**: ~/.local/state/coupang_coupon_issuer/issuer.log
+
+### 지원 배포판
+
+Python 3.10+ 요구사항으로 인해 다음 버전 이상에서만 동작합니다:
+
+- **Ubuntu**: 22.04 (Jammy, Python 3.10) 이상
+- **Debian**: 12 (Bookworm, Python 3.11) 이상
+
+> ⚠️ Ubuntu 20.04 (Python 3.8), Debian 11 (Python 3.9)는 지원되지 않습니다.
 
 ## 프로젝트 구조
 
@@ -201,18 +210,22 @@ cat ~/.local/state/coupang_coupon_issuer/issuer.log | grep ERROR
   - **커버리지 확인**: `uv run pytest --cov=src/coupang_coupon_issuer`
 
 - [x] 통합 테스트 재작성 및 실행 완료 (cron 기반)
-  - **통합 테스트**: 20개 (systemd 35개 → cron 20개로 단순화)
+  - **통합 테스트**: 20개 기본 (systemd 35개 → cron 20개로 단순화)
     - test_service_install.py: 11개 테스트 (cron job, 파일, credentials)
     - test_service_uninstall.py: 6개 테스트 (cron job 제거, 파일 삭제 프롬프트)
     - test_end_to_end.py: 3개 테스트 (E2E 워크플로우, 스케줄 정확성)
-  - **testcontainers 인프라**: Ubuntu 22.04 + cron (privileged mode 불필요)
-  - **conftest.py**: 207 라인 (기존 348 라인에서 단순화)
+  - **다중 배포판 테스트**: 4가지 이미지 × 20개 = 80개 테스트
+    - Ubuntu 24.04 (Noble, Python 3.12)
+    - Ubuntu 22.04 (Jammy, Python 3.10)
+    - Debian 13 (Trixie, Python 3.12)
+    - Debian 12 (Bookworm, Python 3.11)
+  - **testcontainers 인프라**: 자동 이미지 전환 + pip fallback
   - **실행 환경**: Docker Desktop 필요 (WSL2 backend)
   - **테스트 실행**: `uv run pytest tests/integration -v -m integration`
-  - **테스트 결과** (2024-12-19): ✅ 20/20 통과 (100%, 103초)
-  - **주요 수정사항**:
-    - Docker exec 명령어를 `["bash", "-c", "command"]` 형식으로 수정 (쉘 기능 지원)
-    - service.py 경로 계산 로직 수정 (project_root 명확화)
+  - **주요 기능**:
+    - parametrize로 다중 배포판 자동 테스트
+    - PEP 668 대응: `--break-system-packages` fallback 로직
+    - Docker exec 명령어 `["bash", "-c", "command"]` 형식으로 쉘 기능 지원
 
 ### 향후 작업
 - [ ] 성능 최적화 (병렬 처리, 선택사항)
@@ -235,11 +248,11 @@ tests/
 │   ├── test_issuer.py            # 쿠폰 발급 로직 (32개)
 │   ├── test_service.py           # Cron 관리 (28개, Linux only)
 │   └── test_cli.py               # CLI 명령어 (18개)
-└── integration/                  # 통합 테스트 (20개, Docker 필요)
-    ├── conftest.py               # testcontainers 인프라 (207 라인)
-    ├── test_service_install.py   # 설치 프로세스 (11개)
-    ├── test_service_uninstall.py # 제거 프로세스 (6개)
-    └── test_end_to_end.py        # E2E 워크플로우 (3개)
+└── integration/                  # 통합 테스트 (80개, Docker 필요)
+    ├── conftest.py               # testcontainers 인프라 (다중 배포판 parametrize)
+    ├── test_service_install.py   # 설치 프로세스 (11개 × 4 이미지 = 44개)
+    ├── test_service_uninstall.py # 제거 프로세스 (6개 × 4 이미지 = 24개)
+    └── test_end_to_end.py        # E2E 워크플로우 (3개 × 4 이미지 = 12개)
 ```
 
 ### 테스트 실행 명령어
@@ -267,9 +280,37 @@ uv run pytest tests/unit/test_issuer.py -v
   - Windows 환경: 108개 중 80개 실행 (service.py 28개 스킵)
   - Linux 환경: 108개 전부 실행 가능
 - **통합 테스트**:
-  - Windows: Docker Desktop(WSL2) 필요, 20/20 통과 (103초)
+  - Windows: Docker Desktop(WSL2) 필요
   - Linux: Docker만 필요
-  - testcontainers로 Ubuntu 22.04 + cron 컨테이너 실행 (privileged mode 불필요)
+  - **다중 배포판 테스트**: 4개 이미지 × 20개 = 80개 테스트 자동 실행
+  - **테스트 시간**: 약 400초 (이미지 4개 × 100초)
+
+### 다중 배포판 테스트
+
+통합 테스트는 pytest parametrize로 여러 배포판에서 자동 실행됩니다:
+
+```python
+# tests/integration/conftest.py
+@pytest.fixture(
+    scope="session",
+    params=[
+        "ubuntu:24.04",  # Noble Numbat, Python 3.12
+        "ubuntu:22.04",  # Jammy Jellyfish, Python 3.10
+        "debian:13",     # Trixie, Python 3.12
+        "debian:12",     # Bookworm, Python 3.11
+    ]
+)
+def cron_container(request):
+    image = request.param
+    # ... 컨테이너 setup
+```
+
+**PEP 668 대응 (Externally Managed Environment):**
+- 최신 배포판(Ubuntu 24.04, Debian 13)은 `--break-system-packages` 필요
+- Fallback 로직으로 모든 버전 호환성 유지:
+  1. `pip install` 시도 (플래그 없이)
+  2. 실패 시 → `pip install --break-system-packages` 재시도
+- Debian 12도 fallback으로 커버 (일부 환경에서 필요)
 
 ### 테스트 작성 규칙
 
