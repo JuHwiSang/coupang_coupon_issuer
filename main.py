@@ -116,10 +116,11 @@ def cmd_apply(args) -> None:
                     issue_count_digits = re.sub(r'[^\d.]', '', issue_count_raw)
                     try:
                         issue_count = int(float(issue_count_digits)) if issue_count_digits else 1
-                        if issue_count < 1:
-                            raise ValueError(f"행 {row_idx}: 발급개수는 1 이상이어야 합니다 (현재: {issue_count})")
                     except (ValueError, TypeError):
                         raise ValueError(f"행 {row_idx}: 발급개수는 숫자여야 합니다 (현재값: {issue_count_raw})")
+
+                    if issue_count < 1:
+                        raise ValueError(f"행 {row_idx}: 발급개수는 1 이상이어야 합니다 (현재: {issue_count})")
 
             # 7. 할인방식별 추가 검증 (Column E 기준)
             if discount_type == 'RATE':

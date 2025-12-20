@@ -9,16 +9,34 @@ from typing import Optional
 # 서비스 설정
 SERVICE_NAME = "coupang_coupon_issuer"
 
-# API 키 저장 경로
-CONFIG_DIR = Path("/etc") / SERVICE_NAME
+
+# XDG Base Directory helper functions
+def _get_xdg_config_home() -> Path:
+    """XDG_CONFIG_HOME 환경 변수 또는 기본값 (~/.config) 반환"""
+    xdg_config = os.environ.get("XDG_CONFIG_HOME")
+    if xdg_config:
+        return Path(xdg_config)
+    return Path.home() / ".config"
+
+
+def _get_xdg_state_home() -> Path:
+    """XDG_STATE_HOME 환경 변수 또는 기본값 (~/.local/state) 반환"""
+    xdg_state = os.environ.get("XDG_STATE_HOME")
+    if xdg_state:
+        return Path(xdg_state)
+    return Path.home() / ".local" / "state"
+
+
+# 설정 파일 경로 (XDG_CONFIG_HOME)
+CONFIG_DIR = _get_xdg_config_home() / SERVICE_NAME
 CONFIG_FILE = CONFIG_DIR / "credentials.json"
 
-# 엑셀 파일 경로
-EXCEL_INPUT_FILE = Path("/etc") / SERVICE_NAME / "coupons.xlsx"  # 발급할 쿠폰 목록
+# 엑셀 파일 경로 (XDG_CONFIG_HOME)
+EXCEL_INPUT_FILE = CONFIG_DIR / "coupons.xlsx"  # 발급할 쿠폰 목록
 EXCEL_RESULT_DIR = "results"  # 결과 저장 디렉토리
 
-# 로그 디렉토리 (사용자 수준)
-LOG_DIR = Path.home() / ".local" / "state" / SERVICE_NAME
+# 로그 디렉토리 (XDG_STATE_HOME)
+LOG_DIR = _get_xdg_state_home() / SERVICE_NAME
 LOG_FILE = LOG_DIR / "issuer.log"
 
 # 쿠폰 발급 고정값
@@ -62,11 +80,11 @@ class CredentialManager:
         with open(CONFIG_FILE, "w") as f:
             json.dump(credentials, f, indent=2)
 
-        # 파일 권한 설정 (root만 읽기 가능)
+        # 파일 권한 설정 (사용자만 읽기/쓰기 가능)
         os.chmod(CONFIG_FILE, 0o600)
 
         print(f"설정이 저장되었습니다: {CONFIG_FILE}")
-        print(f"파일 권한: 600 (root만 읽기 가능)")
+        print(f"파일 권한: 600 (사용자만 읽기/쓰기 가능)")
 
     @staticmethod
     def load_credentials() -> tuple[str, str, str, str]:

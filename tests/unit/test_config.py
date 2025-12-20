@@ -16,7 +16,98 @@ from coupang_coupon_issuer.config import (
     COUPON_CONTRACT_ID,
     LOG_DIR,
     LOG_FILE,
+    _get_xdg_config_home,
+    _get_xdg_state_home,
 )
+
+
+@pytest.mark.unit
+class TestXDGHelpers:
+    """Test XDG Base Directory helper functions"""
+
+    def test_xdg_config_home_default(self, monkeypatch):
+        """XDG_CONFIG_HOME not set, should return ~/.config"""
+        monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+
+        result = _get_xdg_config_home()
+
+        assert result == Path.home() / ".config"
+
+    def test_xdg_config_home_custom(self, monkeypatch):
+        """XDG_CONFIG_HOME set to custom path"""
+        monkeypatch.setenv("XDG_CONFIG_HOME", "/custom/config")
+
+        result = _get_xdg_config_home()
+
+        assert result == Path("/custom/config")
+
+    def test_xdg_config_home_empty_string(self, monkeypatch):
+        """XDG_CONFIG_HOME set to empty string, should fallback to default"""
+        monkeypatch.setenv("XDG_CONFIG_HOME", "")
+
+        result = _get_xdg_config_home()
+
+        assert result == Path.home() / ".config"
+
+    def test_xdg_state_home_default(self, monkeypatch):
+        """XDG_STATE_HOME not set, should return ~/.local/state"""
+        monkeypatch.delenv("XDG_STATE_HOME", raising=False)
+
+        result = _get_xdg_state_home()
+
+        assert result == Path.home() / ".local" / "state"
+
+    def test_xdg_state_home_custom(self, monkeypatch):
+        """XDG_STATE_HOME set to custom path"""
+        monkeypatch.setenv("XDG_STATE_HOME", "/custom/state")
+
+        result = _get_xdg_state_home()
+
+        assert result == Path("/custom/state")
+
+    def test_xdg_state_home_empty_string(self, monkeypatch):
+        """XDG_STATE_HOME set to empty string, should fallback to default"""
+        monkeypatch.setenv("XDG_STATE_HOME", "")
+
+        result = _get_xdg_state_home()
+
+        assert result == Path.home() / ".local" / "state"
+
+    def test_config_dir_respects_xdg_config_home(self, monkeypatch):
+        """CONFIG_DIR should use custom XDG_CONFIG_HOME if set"""
+        monkeypatch.setenv("XDG_CONFIG_HOME", "/tmp/test_config")
+
+        # Reload module to pick up environment change
+        import importlib
+        import coupang_coupon_issuer.config as config
+        importlib.reload(config)
+
+        # Use Path comparison or posix path for cross-platform compatibility
+        assert "test_config" in str(config.CONFIG_DIR)
+        assert "coupang_coupon_issuer" in str(config.CONFIG_DIR)
+        assert config.CONFIG_DIR == Path("/tmp/test_config/coupang_coupon_issuer")
+
+        # Restore
+        monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+        importlib.reload(config)
+
+    def test_log_dir_respects_xdg_state_home(self, monkeypatch):
+        """LOG_DIR should use custom XDG_STATE_HOME if set"""
+        monkeypatch.setenv("XDG_STATE_HOME", "/tmp/test_state")
+
+        # Reload module to pick up environment change
+        import importlib
+        import coupang_coupon_issuer.config as config
+        importlib.reload(config)
+
+        # Use Path comparison or posix path for cross-platform compatibility
+        assert "test_state" in str(config.LOG_DIR)
+        assert "coupang_coupon_issuer" in str(config.LOG_DIR)
+        assert config.LOG_DIR == Path("/tmp/test_state/coupang_coupon_issuer")
+
+        # Restore
+        monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+        importlib.reload(config)
 
 
 @pytest.mark.unit
@@ -38,14 +129,16 @@ class TestConstants:
         assert "coupang_coupon_issuer" in str(LOG_FILE)
 
     def test_config_file_path(self):
-        # Use Path comparison to handle Windows/Linux differences
-        expected = Path("/etc/coupang_coupon_issuer/credentials.json")
-        assert CONFIG_FILE == expected or CONFIG_FILE.as_posix() == "/etc/coupang_coupon_issuer/credentials.json"
+        """Test config file path uses XDG_CONFIG_HOME"""
+        assert "coupang_coupon_issuer" in str(CONFIG_FILE)
+        assert ".config" in str(CONFIG_FILE)
+        assert str(CONFIG_FILE).endswith("credentials.json")
 
     def test_excel_input_file_path(self):
-        # Use Path comparison to handle Windows/Linux differences
-        expected = Path("/etc/coupang_coupon_issuer/coupons.xlsx")
-        assert EXCEL_INPUT_FILE == expected or EXCEL_INPUT_FILE.as_posix() == "/etc/coupang_coupon_issuer/coupons.xlsx"
+        """Test Excel input file path uses XDG_CONFIG_HOME"""
+        assert "coupang_coupon_issuer" in str(EXCEL_INPUT_FILE)
+        assert ".config" in str(EXCEL_INPUT_FILE)
+        assert str(EXCEL_INPUT_FILE).endswith("coupons.xlsx")
 
     def test_coupon_max_discount(self):
         assert COUPON_MAX_DISCOUNT == 100000

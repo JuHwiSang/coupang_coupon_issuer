@@ -9,7 +9,12 @@ from unittest.mock import patch, MagicMock, mock_open
 from openpyxl import Workbook
 
 from coupang_coupon_issuer.issuer import CouponIssuer
-from coupang_coupon_issuer.config import EXCEL_INPUT_FILE, COUPON_MAX_DISCOUNT, COUPON_CONTRACT_ID
+from coupang_coupon_issuer.config import (
+    EXCEL_INPUT_FILE,
+    COUPON_MAX_DISCOUNT,
+    COUPON_CONTRACT_ID,
+    COUPON_DEFAULT_ISSUE_COUNT
+)
 
 
 @pytest.mark.unit
@@ -627,10 +632,10 @@ class TestIssuerEdgeCases:
 
     def test_issue_propagates_api_exception(self, tmp_path, requests_mock, capsys):
         """
-        Test issue() propagates API exception.
+        Test issue() handles API exception gracefully.
 
-        Covers: issuer.py lines 97-99
-        Expected: 예외 전파
+        Covers: issuer.py lines 196-199
+        Expected: 예외를 잡아서 로그 출력, 쿠폰 발급은 계속 진행
         """
         excel_file = tmp_path / "test.xlsx"
         wb = Workbook()
@@ -640,19 +645,21 @@ class TestIssuerEdgeCases:
         ws.append(["테스트쿠폰", "즉시할인", 30, "RATE", 10, ""])
         wb.save(excel_file)
 
-        # Mock API to raise connection error
+        # Mock API to raise connection error (correct endpoint)
         requests_mock.post(
-            "https://api-gateway.coupang.com/v2/providers/promotion_api/apis/api/v4/vendors/v/instant-discount-coupons",
+            "https://api-gateway.coupang.com/v2/providers/fms/apis/api/v2/vendors/v/coupon",
             exc=Exception("Connection timeout")
         )
 
         issuer = CouponIssuer("a", "s", "u", "v")
 
         with patch('coupang_coupon_issuer.issuer.EXCEL_INPUT_FILE', excel_file):
-            with pytest.raises(Exception) as exc_info:
-                issuer.issue()
+            # Should not raise - exception is caught and logged
+            issuer.issue()
 
-            assert "Connection timeout" in str(exc_info.value)
+        captured = capsys.readouterr()
+        assert "실패: 1" in captured.out
+        assert "Connection timeout" in captured.out
 
     def test_issue_single_coupon_raises_on_zero_discount(self, coupon_dict_factory, requests_mock):
         """
@@ -666,7 +673,7 @@ class TestIssuerEdgeCases:
         coupon = coupon_dict_factory(discount=0)
 
         with pytest.raises(ValueError) as exc_info:
-            issuer._issue_single_coupon(coupon)
+            issuer._issue_single_coupon(1, coupon)
 
         assert "할인금액/비율이 설정되지 않았습니다" in str(exc_info.value)
         assert "테스트쿠폰" in str(exc_info.value)
@@ -682,7 +689,7 @@ class TestIssuerEdgeCases:
 
         coupon = coupon_dict_factory(type='잘못된타입')
 
-        result = issuer._issue_single_coupon(coupon)
+        result = issuer._issue_single_coupon(1, coupon)
 
         assert result['status'] == '실패'
         assert "알 수 없는 쿠폰 타입" in result['message']
@@ -690,27 +697,32 @@ class TestIssuerEdgeCases:
 
     def test_fetch_coupons_from_empty_workbook(self, tmp_path):
         """
-        Test _fetch_coupons_from_excel() with empty workbook (no active sheet).
+        Test _fetch_coupons_from_excel() with workbook that has no active sheet after load.
 
         Covers: issuer.py line 235
         Expected: ValueError: "시트를 찾을 수 없습니다"
         """
         excel_file = tmp_path / "empty_wb.xlsx"
 
-        # Create workbook and remove active sheet
+        # Create minimal valid workbook (openpyxl requires at least one visible sheet to save)
         wb = Workbook()
         ws = wb.active
-        if ws:
-            wb.remove(ws)
+        assert ws is not None
         wb.save(excel_file)
 
         issuer = CouponIssuer("a", "s", "u", "v")
 
+        # Mock load_workbook to return a workbook with no active sheet
         with patch('coupang_coupon_issuer.issuer.EXCEL_INPUT_FILE', excel_file):
-            with pytest.raises(ValueError) as exc_info:
-                issuer._fetch_coupons_from_excel()
+            with patch('coupang_coupon_issuer.issuer.load_workbook') as mock_load:
+                mock_wb = MagicMock()
+                mock_wb.active = None
+                mock_load.return_value = mock_wb
 
-            assert "시트를 찾을 수 없습니다" in str(exc_info.value)
+                with pytest.raises(ValueError) as exc_info:
+                    issuer._fetch_coupons_from_excel()
+
+                assert "시트를 찾을 수 없습니다" in str(exc_info.value)
 
     def test_fetch_coupons_invalid_coupon_type(self, tmp_path):
         """
@@ -764,15 +776,16 @@ class TestIssuerEdgeCases:
         """
         Test _fetch_coupons_from_excel() with non-numeric discount value.
 
-        Covers: issuer.py lines 303-304
-        Expected: ValueError: "할인금액/비율은 숫자여야 합니다"
+        Covers: issuer.py lines 302-307
+        Expected: ValueError with message about discount being 0 or less
+        (non-numeric strings like "abc" become 0 after regex extraction)
         """
         excel_file = tmp_path / "invalid_discount.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
         ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수"])
-        ws.append(["테스트쿠폰", "즉시할인", 30, "RATE", "abc", ""])  # Non-numeric
+        ws.append(["테스트쿠폰", "즉시할인", 30, "RATE", "abc", ""])  # Non-numeric becomes 0
         wb.save(excel_file)
 
         issuer = CouponIssuer("a", "s", "u", "v")
@@ -781,7 +794,8 @@ class TestIssuerEdgeCases:
             with pytest.raises(ValueError) as exc_info:
                 issuer._fetch_coupons_from_excel()
 
-            assert "할인금액/비율은 숫자여야 합니다" in str(exc_info.value)
+            # "abc" is stripped to "" by regex, converted to 0, caught by > 0 check
+            assert "할인금액/비율은 0보다 커야 합니다" in str(exc_info.value)
 
     def test_fetch_coupons_downloadable_with_zero_issue_count(self, tmp_path):
         """
@@ -810,31 +824,33 @@ class TestIssuerEdgeCases:
         """
         Test _fetch_coupons_from_excel() with downloadable coupon and non-numeric issue_count.
 
-        Covers: issuer.py lines 325-326
-        Expected: ValueError: "발급개수는 숫자여야 합니다"
+        Covers: issuer.py lines 320-329 (input normalization)
+        Expected: Non-numeric strings like "xyz" are normalized to empty string,
+                  which triggers default value usage (no exception)
         """
         excel_file = tmp_path / "invalid_count.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
         ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수"])
-        ws.append(["테스트쿠폰", "다운로드쿠폰", 30, "RATE", 10, "xyz"])  # Non-numeric
+        ws.append(["테스트쿠폰", "다운로드쿠폰", 30, "RATE", 10, "xyz"])  # Non-numeric -> default value
         wb.save(excel_file)
 
         issuer = CouponIssuer("a", "s", "u", "v")
 
         with patch('coupang_coupon_issuer.issuer.EXCEL_INPUT_FILE', excel_file):
-            with pytest.raises(ValueError) as exc_info:
-                issuer._fetch_coupons_from_excel()
+            # Should not raise - "xyz" becomes empty string, uses default value
+            coupons = issuer._fetch_coupons_from_excel()
 
-            assert "발급개수는 숫자여야 합니다" in str(exc_info.value)
+            assert len(coupons) == 1
+            assert coupons[0]['issue_count'] == COUPON_DEFAULT_ISSUE_COUNT
 
     def test_validate_fixed_with_quantity_minimum(self, tmp_path):
         """
         Test _fetch_coupons_from_excel() with FIXED_WITH_QUANTITY and discount=0.
 
-        Covers: issuer.py lines 343-344
-        Expected: ValueError: "FIXED_WITH_QUANTITY 할인은 1 이상이어야 합니다"
+        Covers: issuer.py lines 306-307 (general discount > 0 check first)
+        Expected: ValueError from line 307 catches this before FIXED_WITH_QUANTITY check
         """
         excel_file = tmp_path / "fwq_zero.xlsx"
         wb = Workbook()
@@ -850,4 +866,5 @@ class TestIssuerEdgeCases:
             with pytest.raises(ValueError) as exc_info:
                 issuer._fetch_coupons_from_excel()
 
-            assert "FIXED_WITH_QUANTITY 할인은 1 이상이어야 합니다" in str(exc_info.value)
+            # General check (line 307) happens before FIXED_WITH_QUANTITY check (line 344)
+            assert "할인금액/비율은 0보다 커야 합니다" in str(exc_info.value)

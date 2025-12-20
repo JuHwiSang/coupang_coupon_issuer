@@ -166,7 +166,7 @@ def clean_container(cron_container):
 
     Removes:
     - Cron jobs (crontab -r)
-    - Installed files (/opt, /etc, /usr/local/bin)
+    - Installed files (/opt, ~/.config, /usr/local/bin)
     - Log directory
 
     Args:
@@ -180,7 +180,7 @@ def clean_container(cron_container):
 
     # Remove installed files
     cron_container.exec(["bash", "-c", "rm -rf /opt/coupang_coupon_issuer"])
-    cron_container.exec(["bash", "-c", "rm -rf /etc/coupang_coupon_issuer"])
+    cron_container.exec(["bash", "-c", "rm -rf /root/.config/coupang_coupon_issuer"])
     cron_container.exec(["bash", "-c", "rm -f /usr/local/bin/coupang_coupon_issuer"])
     cron_container.exec(["bash", "-c", "rm -rf /root/.local/state/coupang_coupon_issuer"])
 

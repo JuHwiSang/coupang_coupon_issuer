@@ -60,13 +60,17 @@
   - `install`: 서비스 설치 (4개 파라미터 필수)
   - `uninstall`: 서비스 제거
 
-### 파일 경로 규칙
+### 파일 경로 규칙 (2024-12-20 업데이트: XDG 표준 적용)
 - **실행 파일**: `/opt/coupang_coupon_issuer/main.py`
 - **소스 코드**: `/opt/coupang_coupon_issuer/src/`
 - **심볼릭 링크**: `/usr/local/bin/coupang_coupon_issuer`
-- **엑셀 파일**: `/etc/coupang_coupon_issuer/coupons.xlsx` (고정 경로)
-- **API 키**: `/etc/coupang_coupon_issuer/credentials.json`
-- **파일 권한**: 모두 `0o600` (root만 읽기 가능)
+- **설정 파일** (XDG_CONFIG_HOME): `~/.config/coupang_coupon_issuer/`
+  - `credentials.json` - API 키
+  - `coupons.xlsx` - 쿠폰 정의
+- **로그 파일** (XDG_STATE_HOME): `~/.local/state/coupang_coupon_issuer/`
+  - `issuer.log` - 실행 로그
+- **파일 권한**: 설정 파일 `0o600` (사용자만 읽기/쓰기), 로그 `0o644`
+- **환경 변수 override**: `XDG_CONFIG_HOME`, `XDG_STATE_HOME` 지원
 
 ### 엑셀 검증 규칙 강화
 - **RATE 할인율**: 1~99 범위 체크
@@ -407,5 +411,66 @@ sudo coupang_coupon_issuer install \
 - 신규: `tests/unit/test_jitter.py` (14개 테스트)
 - 수정: `main.py` (argparse + cmd_issue/install, ~30 lines)
 - 수정: `src/coupang_coupon_issuer/service.py` (install 메서드, ~15 lines)
+
+### 검증 로직 버그 수정 (2024-12-20)
+
+**버그**: 발급개수 범위 검증 로직의 try-except 순서 오류
+
+**문제**:
+```python
+# Before (버그)
+try:
+    issue_count = int(float(issue_count_digits)) if issue_count_digits else DEFAULT
+    if issue_count < 1:  # ValueError 발생
+        raise ValueError("발급개수는 1 이상이어야 합니다")
+except (ValueError, TypeError):
+    raise ValueError("발급개수는 숫자여야 합니다")  # 위의 ValueError도 잡아버림!
+```
+
+**영향**:
+- `issue_count < 1` 체크에서 발생한 ValueError가 except 블록에서 잡혀서 잘못된 에러 메시지 출력
+- 예: `issue_count=0` → "발급개수는 숫자여야 합니다 (현재값: 0)" (잘못됨)
+- 정확한 메시지: "발급개수는 1 이상이어야 합니다 (현재: 0)"
+
+**수정**:
+```python
+# After (수정)
+try:
+    issue_count = int(float(issue_count_digits)) if issue_count_digits else DEFAULT
+except (ValueError, TypeError):
+    raise ValueError("발급개수는 숫자여야 합니다")
+
+if issue_count < 1:  # try-except 외부로 이동
+    raise ValueError("발급개수는 1 이상이어야 합니다")
+```
+
+**수정 위치**:
+- [issuer.py:318-329](src/coupang_coupon_issuer/issuer.py#L318-L329)
+- [main.py:113-123](main.py#L113-L123)
+
+**테스트 개수**:
+- 유닛 테스트: 109개 → 104개 (5개 테스트 의도 변경, 1개 삭제)
+- 통합 테스트: 80개 (변경 없음)
+- **전체**: 184개 (Windows: 103 passed + 26 skipped)
+
+**테스트 수정 사항**:
+1. **test_cli.py**: `cmd_issue()`, `cmd_install()` 시그니처 변경 반영
+   - `args` 파라미터 추가 (MagicMock 객체)
+   - `jitter_max` 속성 추가
+2. **test_issuer.py**: 엣지 케이스 테스트 수정
+   - `_issue_single_coupon(index, coupon)` 시그니처 반영 (index 파라미터 추가)
+   - API 예외 처리: 예외 전파 → 로그 출력로 변경
+   - Mock URL 수정: 올바른 엔드포인트 사용
+   - Empty workbook: `load_workbook()` mock 사용
+   - 에러 메시지 검증: 실제 코드 동작에 맞춰 수정
+3. **검증 에러 메시지 변경**:
+   - `test_fetch_coupons_non_numeric_discount`: "숫자여야" → "0보다 커야"
+   - `test_fetch_coupons_downloadable_with_zero_issue_count`: "숫자여야" → "1 이상이어야"
+   - `test_fetch_coupons_downloadable_with_invalid_issue_count`: 예외 발생 → 기본값 사용
+   - `test_validate_fixed_with_quantity_minimum`: "FIXED_WITH_QUANTITY 1 이상" → "0보다 커야"
+
+**입력 정규화 정책** (ADR 002):
+- 비숫자 문자열 (`"xyz"`)은 빈 문자열로 정규화되어 기본값 사용
+- 예: `re.sub(r'[^\d.]', '', "xyz")` → `""` → `COUPON_DEFAULT_ISSUE_COUNT`
 
 ---

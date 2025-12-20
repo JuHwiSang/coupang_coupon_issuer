@@ -33,6 +33,8 @@
 - [ADR 008: CLI 구조 재설계](docs/adr/008-cli-restructuring.md) - ~~5개 명령어~~, 4개 명령어, 전역 명령어, 로그 중심 운영
 - [ADR 009: 엑셀 6컬럼 구조](docs/adr/009-excel-6-column-structure.md) - 할인금액/비율과 발급개수 분리
 - [ADR 010: Crontab 기반 스케줄링](docs/adr/010-crontab-service.md) - Cron 스케줄링, 사용자 수준 로그
+- [ADR 011: Jitter 기능](docs/adr/011-jitter-thundering-herd.md) - Thundering herd 방지
+- [ADR 012: XDG Base Directory](docs/adr/012-xdg-base-directory.md) - XDG 표준 준수, 멀티 유저 지원
 
 ### 📝 문서 작성 규칙
 
@@ -71,7 +73,7 @@ Python 3.10+ 요구사항으로 인해 다음 버전 이상에서만 동작합�
 /opt/coupang_coupon_issuer/
 ├── main.py                          # CLI 진입점
 ├── src/coupang_coupon_issuer/
-│   ├── config.py                    # API 키 관리, 고정값 설정
+│   ├── config.py                    # API 키 관리, XDG 경로 설정
 │   ├── coupang_api.py               # Coupang API 클라이언트 (HMAC-SHA256)
 │   ├── issuer.py                    # 쿠폰 발급 로직 (로그 출력만)
 │   └── service.py                   # Cron 설치/제거
@@ -80,12 +82,12 @@ Python 3.10+ 요구사항으로 인해 다음 버전 이상에서만 동작합�
 /usr/local/bin/
 └── coupang_coupon_issuer            # 심볼릭 링크 → /opt/.../main.py
 
-/etc/coupang_coupon_issuer/
-├── credentials.json                 # API 키 (600 권한)
-└── coupons.xlsx                     # 쿠폰 정의 (600 권한)
+~/.config/coupang_coupon_issuer/     # XDG_CONFIG_HOME (사용자 설정)
+├── credentials.json                 # API 키 (user 소유, 600)
+└── coupons.xlsx                     # 쿠폰 정의 (user 소유, 600)
 
-~/.local/state/coupang_coupon_issuer/
-└── issuer.log                       # 로그 파일 (사용자 수준)
+~/.local/state/coupang_coupon_issuer/ # XDG_STATE_HOME (상태 파일)
+└── issuer.log                       # 로그 파일 (user 소유, 644)
 
 # 개발 디렉토리 구조
 docs/
@@ -101,7 +103,8 @@ docs/
 │   ├── 008-cli-restructuring.md
 │   ├── 009-excel-6-column-structure.md
 │   ├── 010-crontab-service.md
-│   └── 011-jitter-thundering-herd.md  # Jitter 기능
+│   ├── 011-jitter-thundering-herd.md  # Jitter 기능
+│   └── 012-xdg-base-directory.md   # XDG 표준 준수
 └── coupang/                         # Coupang API 규격 문서
     ├── workflow.md
     ├── parameters-explained.md
@@ -131,8 +134,8 @@ docs/
 설치 후 전역 명령어로 실행 가능:
 
 ```bash
-# 1. 엑셀 파일 검증 및 적용
-sudo coupang_coupon_issuer apply ./coupons.xlsx
+# 1. 엑셀 파일 검증 및 적용 (sudo 불필요!)
+coupang_coupon_issuer apply ./coupons.xlsx
 
 # 2. 단발성 쿠폰 발급 (테스트용)
 coupang_coupon_issuer issue
@@ -169,6 +172,30 @@ tail -f ~/.local/state/coupang_coupon_issuer/issuer.log # 로그 확인
 - 안전한 폴링 루프 (1초 간격, KeyboardInterrupt 처리)
 - 시작/종료 시점만 로그 출력
 
+### 환경 변수 (XDG Base Directory)
+
+**ADR 012**: XDG Base Directory Specification 준수
+
+기본 경로를 변경하려면 환경 변수를 설정하세요:
+
+```bash
+# 설정 파일 위치 변경 (기본: ~/.config)
+export XDG_CONFIG_HOME=/custom/config
+coupang_coupon_issuer apply ./coupons.xlsx
+# → /custom/config/coupang_coupon_issuer/coupons.xlsx
+
+# 로그 파일 위치 변경 (기본: ~/.local/state)
+export XDG_STATE_HOME=/var/log/myapp
+coupang_coupon_issuer issue
+# → /var/log/myapp/coupang_coupon_issuer/issuer.log
+```
+
+**기본 경로**:
+- 설정: `~/.config/coupang_coupon_issuer/` (credentials.json, coupons.xlsx)
+- 로그: `~/.local/state/coupang_coupon_issuer/` (issuer.log)
+
+**멀티 유저 지원**: 각 사용자가 독립적으로 설정/로그 관리 가능
+
 ### 다음 구현 작업
 
 - [x] CLI 구조 재설계 (4개 명령어)
@@ -179,6 +206,7 @@ tail -f ~/.local/state/coupang_coupon_issuer/issuer.log # 로그 확인
 - [x] 테스트 작성 (pytest + requests-mock + testcontainers)
 - [x] Crontab 기반 스케줄링으로 전환
 - [x] Jitter 기능 (Thundering herd 방지)
+- [x] XDG Base Directory 표준 적용 (멀티 유저 지원)
 - [ ] 성능 최적화 (병렬 처리, 선택사항)
 
 ## 디버깅

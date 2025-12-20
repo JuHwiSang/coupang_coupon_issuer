@@ -96,11 +96,11 @@ class TestInstallCredentials:
     """Test credentials storage"""
 
     def test_install_saves_credentials_file(self, installed_service):
-        """Verify credentials.json is created"""
+        """Verify credentials.json is created in ~/.config"""
         exec_fn = installed_service["exec"]
 
-        # Check file exists
-        exit_code, output = exec_fn("test -f /etc/coupang_coupon_issuer/credentials.json && echo EXISTS")
+        # Check file exists (container runs as root, so ~/.config = /root/.config)
+        exit_code, output = exec_fn("test -f /root/.config/coupang_coupon_issuer/credentials.json && echo EXISTS")
         assert exit_code == 0
         assert "EXISTS" in output
 
@@ -109,7 +109,7 @@ class TestInstallCredentials:
         exec_fn = installed_service["exec"]
 
         # Check permissions
-        exit_code, output = exec_fn("stat -c '%a' /etc/coupang_coupon_issuer/credentials.json")
+        exit_code, output = exec_fn("stat -c '%a' /root/.config/coupang_coupon_issuer/credentials.json")
         assert exit_code == 0
         assert "600" in output
 
@@ -119,7 +119,7 @@ class TestInstallCredentials:
         creds = installed_service["credentials"]
 
         # Read credentials file
-        exit_code, output = exec_fn("cat /etc/coupang_coupon_issuer/credentials.json")
+        exit_code, output = exec_fn("cat /root/.config/coupang_coupon_issuer/credentials.json")
         assert exit_code == 0
 
         # Parse JSON
@@ -171,7 +171,7 @@ class TestInstallDuplicateInstall:
         assert job_count2 == 1
 
         # Verify credentials were updated
-        exit_code, creds_output = container_exec("cat /etc/coupang_coupon_issuer/credentials.json")
+        exit_code, creds_output = container_exec("cat /root/.config/coupang_coupon_issuer/credentials.json")
         assert exit_code == 0
         data = json.loads(creds_output)
         assert data["access_key"] == "key2"

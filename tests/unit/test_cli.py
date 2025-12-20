@@ -125,7 +125,10 @@ class TestIssueCommand:
         mock_issuer = MagicMock()
         mock_issuer_class.return_value = mock_issuer
 
-        main.cmd_issue()
+        args = MagicMock()
+        args.jitter_max = None
+
+        main.cmd_issue(args)
 
         # Verify credentials were loaded
         mock_load_env.assert_called_once()
@@ -138,8 +141,11 @@ class TestIssueCommand:
         """Issue should exit if credentials can't be loaded"""
         mocker.patch('main.CredentialManager.load_credentials_to_env', side_effect=FileNotFoundError("No file"))
 
+        args = MagicMock()
+        args.jitter_max = None
+
         with pytest.raises(SystemExit):
-            main.cmd_issue()
+            main.cmd_issue(args)
 
         captured = capsys.readouterr()
         assert "ERROR: API 키 로드 실패" in captured.out
@@ -152,8 +158,11 @@ class TestIssueCommand:
         mock_issuer.issue.side_effect = Exception("Issuer failed")
         mock_issuer_class.return_value = mock_issuer
 
+        args = MagicMock()
+        args.jitter_max = None
+
         with pytest.raises(SystemExit):
-            main.cmd_issue()
+            main.cmd_issue(args)
 
         captured = capsys.readouterr()
         assert "ERROR: 쿠폰 발급 실패" in captured.out
@@ -187,10 +196,11 @@ class TestInstallCommand:
         args.secret_key = "secret-key"
         args.user_id = "user-id"
         args.vendor_id = "vendor-id"
+        args.jitter_max = None
 
         main.cmd_install(args)
 
-        mock_install.assert_called_once_with("access-key", "secret-key", "user-id", "vendor-id")
+        mock_install.assert_called_once_with("access-key", "secret-key", "user-id", "vendor-id", jitter_max=None)
 
 
 @pytest.mark.unit

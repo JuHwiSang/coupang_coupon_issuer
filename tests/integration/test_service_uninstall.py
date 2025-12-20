@@ -62,7 +62,7 @@ class TestUninstallFileDeletion:
         exit_code, _ = exec_fn("test -d /opt/coupang_coupon_issuer")
         assert exit_code == 0  # Directory still exists
 
-        exit_code, _ = exec_fn("test -f /etc/coupang_coupon_issuer/credentials.json")
+        exit_code, _ = exec_fn("test -f /root/.config/coupang_coupon_issuer/credentials.json")
         assert exit_code == 0  # Credentials still exist
 
     def test_uninstall_with_yes_to_install_dir(self, installed_service):
@@ -78,7 +78,7 @@ class TestUninstallFileDeletion:
         assert exit_code != 0  # Directory should not exist
 
         # Other files still exist
-        exit_code, _ = exec_fn("test -f /etc/coupang_coupon_issuer/credentials.json")
+        exit_code, _ = exec_fn("test -f /root/.config/coupang_coupon_issuer/credentials.json")
         assert exit_code == 0
 
     def test_uninstall_with_yes_to_credentials(self, installed_service):
@@ -90,7 +90,7 @@ class TestUninstallFileDeletion:
         exec_fn(uninstall_cmd)
 
         # Verify credentials are removed
-        exit_code, _ = exec_fn("test -f /etc/coupang_coupon_issuer/credentials.json")
+        exit_code, _ = exec_fn("test -f /root/.config/coupang_coupon_issuer/credentials.json")
         assert exit_code != 0  # Credentials should not exist
 
         # Install dir still exists
@@ -109,7 +109,7 @@ class TestUninstallFileDeletion:
         exit_code, _ = exec_fn("test -d /opt/coupang_coupon_issuer")
         assert exit_code != 0  # Install dir removed
 
-        exit_code, _ = exec_fn("test -f /etc/coupang_coupon_issuer/credentials.json")
+        exit_code, _ = exec_fn("test -f /root/.config/coupang_coupon_issuer/credentials.json")
         assert exit_code != 0  # Credentials removed
 
         exit_code, _ = exec_fn("test -d /root/.local/state/coupang_coupon_issuer")
