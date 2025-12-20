@@ -354,3 +354,58 @@ tail -f ~/.local/state/coupang_coupon_issuer/issuer.log  # 로그 확인
 4. 로그 위치 변경: journalctl → `~/.local/state/...`
 
 ---
+
+## 2024-12-20
+
+### Jitter 기능 추가 (ADR 011)
+
+**목적**: Thundering herd 방지 (여러 인스턴스 동시 실행 시 API 부하 분산)
+
+**구현 방식**:
+- **폴링 루프**: 1초마다 목표 시간 체크 (긴 블로킹 sleep 대신)
+- **CLI 인자**: `--jitter-max N` (1-120 범위, credentials.json 사용 안 함)
+- **기본값**: jitter 없음 (하위 호환, 명시적 opt-in)
+- **로그**: 시작/종료 시점만 출력 (진행 로그 없음)
+
+**사용법**:
+```bash
+# 수동 실행 (jitter 60분)
+coupang_coupon_issuer issue --jitter-max 60
+
+# 서비스 설치 (jitter 활성화)
+sudo coupang_coupon_issuer install \
+  --access-key ... \
+  --secret-key ... \
+  --user-id ... \
+  --vendor-id ... \
+  --jitter-max 60
+```
+
+**Cron Job 예시**:
+```bash
+0 0 * * * /usr/bin/python3 /opt/coupang_coupon_issuer/main.py issue --jitter-max 60 >> ~/.local/state/coupang_coupon_issuer/issuer.log 2>&1  # coupang_coupon_issuer_job
+```
+
+**로그 예시**:
+```
+[2024-12-20 00:00:00] Jitter 대기 시작 (목표: 00:37:42, 지연: +37분)
+[2024-12-20 00:37:42] Jitter 대기 완료. 쿠폰 발급을 시작합니다.
+[2024-12-20 00:37:42] 쿠폰 발급 작업 시작
+```
+
+**안전성**:
+- KeyboardInterrupt 처리: 최대 1초 내 응답
+- 시스템 시계 변경 대응: 매 폴링마다 `datetime.now()` 재확인
+- 0분 jitter 처리: 즉시 실행 로그 출력
+
+**테스트 개수 변화**:
+- 유닛 테스트: 95개 → 109개 (+14개, test_jitter.py 신규)
+- 통합 테스트: 추가 예정
+
+**파일 변경**:
+- 신규: `src/coupang_coupon_issuer/jitter.py` (~100 lines)
+- 신규: `tests/unit/test_jitter.py` (14개 테스트)
+- 수정: `main.py` (argparse + cmd_issue/install, ~30 lines)
+- 수정: `src/coupang_coupon_issuer/service.py` (install 메서드, ~15 lines)
+
+---

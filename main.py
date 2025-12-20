@@ -150,8 +150,23 @@ def cmd_apply(args) -> None:
     print(f"복사 완료: {dest}", flush=True)
 
 
-def cmd_issue() -> None:
-    """단발성 쿠폰 발급 (즉시 실행)"""
+def cmd_issue(args) -> None:
+    """단발성 쿠폰 발급 (옵션으로 jitter 적용 가능)"""
+    # 1. Jitter 처리 (선택사항)
+    if hasattr(args, 'jitter_max') and args.jitter_max is not None and args.jitter_max > 0:
+        from src.coupang_coupon_issuer.jitter import JitterScheduler
+
+        try:
+            scheduler = JitterScheduler(max_jitter_minutes=args.jitter_max)
+            scheduler.wait_with_jitter()
+        except ValueError as e:
+            print(f"ERROR: Jitter 설정 오류: {e}", flush=True)
+            sys.exit(1)
+        except KeyboardInterrupt:
+            print("\n쿠폰 발급이 중단되었습니다.", flush=True)
+            sys.exit(130)
+
+    # 2. 쿠폰 발급 시작
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     print(f"[{timestamp}] 쿠폰 발급 시작...", flush=True)
 
@@ -183,7 +198,19 @@ def cmd_install(args) -> None:
         print("  --vendor-id   : 판매자 ID", flush=True)
         sys.exit(1)
 
-    CrontabService.install(args.access_key, args.secret_key, args.user_id, args.vendor_id)
+    # Jitter 범위 검증 (선택사항)
+    if hasattr(args, 'jitter_max') and args.jitter_max is not None:
+        if not (1 <= args.jitter_max <= 120):
+            print(f"ERROR: --jitter-max는 1-120 범위여야 합니다 (현재: {args.jitter_max})", flush=True)
+            sys.exit(1)
+
+    CrontabService.install(
+        args.access_key,
+        args.secret_key,
+        args.user_id,
+        args.vendor_id,
+        jitter_max=args.jitter_max if hasattr(args, 'jitter_max') else None
+    )
 
 
 def cmd_uninstall() -> None:
@@ -227,7 +254,14 @@ def main() -> None:
     apply_parser.add_argument("excel_file", type=str, help="엑셀 파일 경로")
 
     # issue 서브파서
-    subparsers.add_parser("issue", help="단발성 쿠폰 발급 (즉시 실행)")
+    issue_parser = subparsers.add_parser("issue", help="단발성 쿠폰 발급 (즉시 실행)")
+    issue_parser.add_argument(
+        "--jitter-max",
+        type=int,
+        metavar="MINUTES",
+        dest="jitter_max",
+        help="최대 Jitter 시간 (분 단위, 1-120 범위)"
+    )
 
     # install 파서에 user_id, vendor_id 추가
     install_parser = subparsers.add_parser("install", help="Cron 기반 서비스 설치")
@@ -235,6 +269,12 @@ def main() -> None:
     install_parser.add_argument("--secret-key", required=True, help="Coupang Secret Key")
     install_parser.add_argument("--user-id", required=True, help="WING 사용자 ID")
     install_parser.add_argument("--vendor-id", required=True, help="판매자 ID")
+    install_parser.add_argument(
+        "--jitter-max",
+        type=int,
+        metavar="MINUTES",
+        help="최대 Jitter 시간 (분 단위, 1-120 범위, 기본: 미사용)"
+    )
 
     # uninstall 파서 (변경 없음)
     subparsers.add_parser("uninstall", help="Cron 기반 서비스 제거")
@@ -249,7 +289,7 @@ def main() -> None:
     if args.command == "apply":
         cmd_apply(args)
     elif args.command == "issue":
-        cmd_issue()
+        cmd_issue(args)
     elif args.command == "install":
         cmd_install(args)
     elif args.command == "uninstall":

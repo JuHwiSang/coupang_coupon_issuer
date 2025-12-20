@@ -238,7 +238,13 @@ class CrontabService:
         print("Cron job이 성공적으로 제거되었습니다", flush=True)
 
     @staticmethod
-    def install(access_key: str, secret_key: str, user_id: str, vendor_id: str) -> None:
+    def install(
+        access_key: str,
+        secret_key: str,
+        user_id: str,
+        vendor_id: str,
+        jitter_max: Optional[int] = None
+    ) -> None:
         """
         Cron 기반 서비스 설치
 
@@ -256,6 +262,7 @@ class CrontabService:
             secret_key: Coupang Secret Key
             user_id: WING 사용자 ID
             vendor_id: 판매자 ID
+            jitter_max: 최대 Jitter 시간 (분 단위, None이면 jitter 미사용)
         """
         CrontabService._check_root()
 
@@ -340,12 +347,24 @@ class CrontabService:
 
         # 7. Cron job 추가
         print("\nCron job 추가 중...", flush=True)
-        cron_job = f"0 0 * * * {python_path} {script_path} issue >> {LOG_FILE} 2>&1  {CrontabService.CRON_MARKER}"
+
+        # Jitter 옵션 포함
+        jitter_option = ""
+        if jitter_max is not None and jitter_max > 0:
+            jitter_option = f" --jitter-max {jitter_max}"
+            print(f"Jitter 설정: 최대 {jitter_max}분 랜덤 지연", flush=True)
+
+        cron_job = (
+            f"0 0 * * * {python_path} {script_path} issue{jitter_option} "
+            f">> {LOG_FILE} 2>&1  {CrontabService.CRON_MARKER}"
+        )
         CrontabService._add_cron_job(cron_job)
 
         print("\n설치 완료!")
         print(f"전역 명령어: coupang_coupon_issuer")
-        print(f"Cron 스케줄: 매일 00:00")
+        print(f"Cron 스케줄: 매일 00:00{' (Jitter 활성화)' if jitter_max else ''}")
+        if jitter_max:
+            print(f"  → 실제 실행: 00:00 ~ {jitter_max//60:02d}:{jitter_max%60:02d} 사이")
         print(f"로그 확인: tail -f {LOG_FILE}")
         print(f"Cron 확인: crontab -l")
         print(f"수동 실행: coupang_coupon_issuer issue")

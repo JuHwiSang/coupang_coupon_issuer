@@ -100,7 +100,8 @@ docs/
 │   ├── 007-coupon-issuance-workflow.md
 │   ├── 008-cli-restructuring.md
 │   ├── 009-excel-6-column-structure.md
-│   └── 010-crontab-service.md      # 현재 사용
+│   ├── 010-crontab-service.md
+│   └── 011-jitter-thundering-herd.md  # Jitter 기능
 └── coupang/                         # Coupang API 규격 문서
     ├── workflow.md
     ├── parameters-explained.md
@@ -136,12 +137,23 @@ sudo coupang_coupon_issuer apply ./coupons.xlsx
 # 2. 단발성 쿠폰 발급 (테스트용)
 coupang_coupon_issuer issue
 
+# 2-1. Jitter 적용 (Thundering herd 방지)
+coupang_coupon_issuer issue --jitter-max 60  # 0-60분 랜덤 지연
+
 # 3. 서비스 설치
 sudo coupang_coupon_issuer install \
   --access-key YOUR_KEY \
   --secret-key YOUR_SECRET \
   --user-id YOUR_USER_ID \
   --vendor-id YOUR_VENDOR_ID
+
+# 3-1. 서비스 설치 (Jitter 활성화)
+sudo coupang_coupon_issuer install \
+  --access-key YOUR_KEY \
+  --secret-key YOUR_SECRET \
+  --user-id YOUR_USER_ID \
+  --vendor-id YOUR_VENDOR_ID \
+  --jitter-max 60  # 선택사항: 0-60분 랜덤 지연
 
 # 4. 서비스 제거
 sudo coupang_coupon_issuer uninstall
@@ -150,6 +162,12 @@ sudo coupang_coupon_issuer uninstall
 crontab -l                                              # 스케줄 확인
 tail -f ~/.local/state/coupang_coupon_issuer/issuer.log # 로그 확인
 ```
+
+**Jitter 기능 (ADR 011)**:
+- 여러 인스턴스 동시 실행 시 API 부하 분산 (Thundering herd 방지)
+- 0-N분 랜덤 지연 (1-120 범위)
+- 안전한 폴링 루프 (1초 간격, KeyboardInterrupt 처리)
+- 시작/종료 시점만 로그 출력
 
 ### 다음 구현 작업
 
@@ -160,6 +178,7 @@ tail -f ~/.local/state/coupang_coupon_issuer/issuer.log # 로그 확인
 - [x] Docker 테스트 환경 구성
 - [x] 테스트 작성 (pytest + requests-mock + testcontainers)
 - [x] Crontab 기반 스케줄링으로 전환
+- [x] Jitter 기능 (Thundering herd 방지)
 - [ ] 성능 최적화 (병렬 처리, 선택사항)
 
 ## 디버깅
