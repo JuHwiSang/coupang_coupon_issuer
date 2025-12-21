@@ -152,7 +152,7 @@ def cmd_verify(args) -> None:
 
 def cmd_issue(args) -> None:
     """단발성 쿠폰 발급 (옵션으로 jitter 적용 가능)"""
-    base_dir = Path(args.directory).resolve() if args.directory else Path.cwd()
+    base_dir = Path(args.directory).resolve()
 
     # 1. Jitter 처리 (선택사항)
     if hasattr(args, 'jitter_max') and args.jitter_max is not None and args.jitter_max > 0:
@@ -192,15 +192,27 @@ def cmd_install(args) -> None:
     """Cron 기반 서비스 설치"""
     base_dir = Path(args.directory).resolve()
 
-    # 4개 파라미터 모두 필수
-    if not all([args.access_key, args.secret_key, args.user_id, args.vendor_id]):
-        print("ERROR: 모든 인자가 필요합니다.", flush=True)
-        print("필수 인자:", flush=True)
-        print("  --access-key  : Coupang Access Key", flush=True)
-        print("  --secret-key  : Coupang Secret Key", flush=True)
-        print("  --user-id     : WING 사용자 ID", flush=True)
-        print("  --vendor-id   : 판매자 ID", flush=True)
-        sys.exit(1)
+    # # 4개 파라미터 모두 필수
+    # if not all([args.access_key, args.secret_key, args.user_id, args.vendor_id]):
+    #     print("ERROR: 모든 인자가 필요합니다.", flush=True)
+    #     print("필수 인자:", flush=True)
+    #     print("  --access-key  : Coupang Access Key", flush=True)
+    #     print("  --secret-key  : Coupang Secret Key", flush=True)
+    #     print("  --user-id     : WING 사용자 ID", flush=True)
+    #     print("  --vendor-id   : 판매자 ID", flush=True)
+    #     sys.exit(1)
+    
+    if not args.access_key:
+        args.access_key = input("access key: ")
+        
+    if not args.secret_key:
+        args.secret_key = input("secret key: ")
+        
+    if not args.user_id:
+        args.user_id = input("user id: ")
+        
+    if not args.vendor_id:
+        args.vendor_id = input("vendor id: ")
 
     # Jitter 범위 검증 (선택사항)
     if hasattr(args, 'jitter_max') and args.jitter_max is not None:
@@ -220,7 +232,7 @@ def cmd_install(args) -> None:
 
 def cmd_uninstall(args) -> None:
     """Cron 기반 서비스 제거"""
-    base_dir = Path(args.directory).resolve() if args.directory else Path.cwd()
+    base_dir = Path(args.directory).resolve()
     CrontabService.uninstall(base_dir)
 
 
@@ -276,7 +288,7 @@ def main() -> None:
     issue_parser.add_argument(
         "directory",
         nargs="?",
-        default=None,
+        default=".",
         help="작업 디렉토리 (기본: 현재 디렉토리)"
     )
     issue_parser.add_argument(
@@ -291,12 +303,14 @@ def main() -> None:
     install_parser = subparsers.add_parser("install", help="Cron 기반 서비스 설치")
     install_parser.add_argument(
         "directory",
+        nargs="?",
+        default=".",
         help="작업 디렉토리"
     )
-    install_parser.add_argument("--access-key", required=True, help="Coupang Access Key")
-    install_parser.add_argument("--secret-key", required=True, help="Coupang Secret Key")
-    install_parser.add_argument("--user-id", required=True, help="WING 사용자 ID")
-    install_parser.add_argument("--vendor-id", required=True, help="판매자 ID")
+    install_parser.add_argument("--access-key", help="Coupang Access Key")
+    install_parser.add_argument("--secret-key", help="Coupang Secret Key")
+    install_parser.add_argument("--user-id", help="WING 사용자 ID")
+    install_parser.add_argument("--vendor-id", help="판매자 ID")
     install_parser.add_argument(
         "--jitter-max",
         type=int,
@@ -309,7 +323,7 @@ def main() -> None:
     uninstall_parser.add_argument(
         "directory",
         nargs="?",
-        default=None,
+        default=".",
         help="작업 디렉토리 (기본: 현재 디렉토리)"
     )
 
