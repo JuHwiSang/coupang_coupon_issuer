@@ -241,7 +241,3 @@ class ConfigManager:
             print(f"설정 파일이 제거되었습니다: {config_file}")
         else:
             print(f"설정 파일이 존재하지 않습니다: {config_file}")
-
-
-# 레거시 호환성 (deprecated)
-CredentialManager = ConfigManager

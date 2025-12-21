@@ -364,14 +364,3 @@ class TestConfigManagerEnv:
 
         assert "쿠폰 정보가 설정되지 않았습니다" in str(exc_info.value)
         assert "COUPANG_USER_ID, COUPANG_VENDOR_ID" in str(exc_info.value)
-
-
-@pytest.mark.unit
-class TestLegacyCompatibility:
-    """Test backward compatibility"""
-
-    def test_credential_manager_alias_exists(self):
-        """CredentialManager should be an alias to ConfigManager"""
-        from coupang_coupon_issuer.config import CredentialManager
-
-        assert CredentialManager is ConfigManager
