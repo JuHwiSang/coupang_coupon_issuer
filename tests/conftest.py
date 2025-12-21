@@ -1,3 +1,4 @@
+import sys
 import json
 import pytest
 from pathlib import Path
@@ -52,3 +53,9 @@ def mock_coupang_api(requests_mock):
 def sample_credentials():
     """Sample credentials tuple"""
     return ("test-access-key", "test-secret-key", "test-user-id", "test-vendor-id")
+
+
+@pytest.fixture
+def mock_config_paths(tmp_path):
+    """작업 디렉토리 (더 이상 PyInstaller 모킹 불필요)"""
+    return tmp_path

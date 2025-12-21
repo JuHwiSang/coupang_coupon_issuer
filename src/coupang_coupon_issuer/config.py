@@ -1,7 +1,9 @@
 """설정 및 API 키 관리 모듈"""
 
 import os
+import sys
 import json
+import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -10,34 +12,38 @@ from typing import Optional
 SERVICE_NAME = "coupang_coupon_issuer"
 
 
-# XDG Base Directory helper functions
-def _get_xdg_config_home() -> Path:
-    """XDG_CONFIG_HOME 환경 변수 또는 기본값 (~/.config) 반환"""
-    xdg_config = os.environ.get("XDG_CONFIG_HOME")
-    if xdg_config:
-        return Path(xdg_config)
-    return Path.home() / ".config"
+# 경로 해결 함수
+def get_base_dir(work_dir: Optional[Path] = None) -> Path:
+    """
+    작업 디렉토리 경로 반환
+
+    Args:
+        work_dir: 명시적으로 지정된 작업 디렉토리 (기본: 현재 디렉토리)
+
+    Returns:
+        절대 경로로 변환된 작업 디렉토리
+    """
+    if work_dir is None:
+        return Path.cwd().resolve()
+    return Path(work_dir).resolve()
 
 
-def _get_xdg_state_home() -> Path:
-    """XDG_STATE_HOME 환경 변수 또는 기본값 (~/.local/state) 반환"""
-    xdg_state = os.environ.get("XDG_STATE_HOME")
-    if xdg_state:
-        return Path(xdg_state)
-    return Path.home() / ".local" / "state"
+def get_config_file(base_dir: Path) -> Path:
+    """config.json 파일 경로 반환"""
+    return base_dir / "config.json"
 
 
-# 설정 파일 경로 (XDG_CONFIG_HOME)
-CONFIG_DIR = _get_xdg_config_home() / SERVICE_NAME
-CONFIG_FILE = CONFIG_DIR / "credentials.json"
+def get_excel_file(base_dir: Path) -> Path:
+    """coupons.xlsx 파일 경로 반환"""
+    return base_dir / "coupons.xlsx"
 
-# 엑셀 파일 경로 (XDG_CONFIG_HOME)
-EXCEL_INPUT_FILE = CONFIG_DIR / "coupons.xlsx"  # 발급할 쿠폰 목록
-EXCEL_RESULT_DIR = "results"  # 결과 저장 디렉토리
 
-# 로그 디렉토리 (XDG_STATE_HOME)
-LOG_DIR = _get_xdg_state_home() / SERVICE_NAME
-LOG_FILE = LOG_DIR / "issuer.log"
+def get_log_file(base_dir: Path) -> Path:
+    """issuer.log 파일 경로 반환"""
+    return base_dir / "issuer.log"
+
+# 레거시 경로 (제거 예정)
+EXCEL_RESULT_DIR = "results"  # ADR 009에서 결과 출력 제거로 사용하지 않음
 
 # 쿠폰 발급 고정값
 COUPON_MAX_DISCOUNT = 100000  # 최대 할인금액 (10만원)
@@ -45,51 +51,93 @@ COUPON_CONTRACT_ID = -1  # 계약서 ID 고정값
 COUPON_DEFAULT_ISSUE_COUNT = 1  # 다운로드쿠폰 발급개수 기본값 (Column F가 비어있을 때)
 
 
-class CredentialManager:
-    """API 키 관리 클래스"""
+class ConfigManager:
+    """config.json 읽기/쓰기 + UUID 관리"""
 
     @staticmethod
-    def save_credentials(
+    def save_config(
+        base_dir: Path,
         access_key: str,
         secret_key: str,
         user_id: str,
-        vendor_id: str
-    ) -> None:
+        vendor_id: str,
+        installation_id: Optional[str] = None
+    ) -> str:
         """
-        API 키 및 쿠폰 발급 정보를 파일에 안전하게 저장합니다.
+        설정 저장 (credentials + UUID)
 
         Args:
+            base_dir: 작업 디렉토리
             access_key: Coupang Access Key
             secret_key: Coupang Secret Key
             user_id: WING 사용자 ID (다운로드쿠폰용)
             vendor_id: 판매자 ID (즉시할인쿠폰용)
+            installation_id: 설치 UUID (없으면 자동 생성)
+
+        Returns:
+            installation_id: 생성/사용된 UUID
         """
-        print(f"API 키 및 쿠폰 정보 저장 중: {CONFIG_FILE}")
+        if installation_id is None:
+            installation_id = str(uuid.uuid4())
 
-        # 디렉토리 생성 (없으면)
-        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-
-        # 키 저장
-        credentials = {
+        config = {
             "access_key": access_key,
             "secret_key": secret_key,
             "user_id": user_id,
             "vendor_id": vendor_id,
+            "installation_id": installation_id
         }
 
-        with open(CONFIG_FILE, "w") as f:
-            json.dump(credentials, f, indent=2)
+        config_file = get_config_file(base_dir)
+        print(f"설정 저장 중: {config_file}")
+
+        # 디렉토리 생성 (없으면)
+        config_file.parent.mkdir(parents=True, exist_ok=True)
+
+        # 설정 저장
+        with open(config_file, 'w') as f:
+            json.dump(config, f, indent=2)
 
         # 파일 권한 설정 (사용자만 읽기/쓰기 가능)
-        os.chmod(CONFIG_FILE, 0o600)
+        os.chmod(config_file, 0o600)
 
-        print(f"설정이 저장되었습니다: {CONFIG_FILE}")
+        print(f"설정이 저장되었습니다: {config_file}")
+        print(f"Installation ID: {installation_id}")
         print(f"파일 권한: 600 (사용자만 읽기/쓰기 가능)")
 
+        return installation_id
+
     @staticmethod
-    def load_credentials() -> tuple[str, str, str, str]:
+    def load_config(base_dir: Path) -> dict:
+        """
+        설정 로드 (UUID 포함)
+
+        Args:
+            base_dir: 작업 디렉토리
+
+        Returns:
+            config: 전체 설정 dict
+
+        Raises:
+            FileNotFoundError: 설정 파일이 없는 경우
+        """
+        config_file = get_config_file(base_dir)
+        if not config_file.exists():
+            raise FileNotFoundError(
+                f"설정 파일이 없습니다: {config_file}\n"
+                f"먼저 'install' 명령으로 서비스를 설치하고 설정을 등록하세요."
+            )
+
+        with open(config_file, 'r') as f:
+            return json.load(f)
+
+    @staticmethod
+    def load_credentials(base_dir: Path) -> tuple[str, str, str, str]:
         """
         저장된 API 키 및 쿠폰 정보를 불러옵니다.
+
+        Args:
+            base_dir: 작업 디렉토리
 
         Returns:
             (access_key, secret_key, user_id, vendor_id) 튜플
@@ -98,32 +146,46 @@ class CredentialManager:
             FileNotFoundError: 설정 파일이 없는 경우
             ValueError: 설정 파일이 손상된 경우
         """
-        if not CONFIG_FILE.exists():
-            raise FileNotFoundError(
-                f"설정 파일이 없습니다: {CONFIG_FILE}\n"
-                f"먼저 'install' 명령으로 서비스를 설치하고 설정을 등록하세요."
-            )
+        config = ConfigManager.load_config(base_dir)
+        config_file = get_config_file(base_dir)
 
-        with open(CONFIG_FILE, "r") as f:
-            credentials = json.load(f)
-
-        access_key = credentials.get("access_key")
-        secret_key = credentials.get("secret_key")
-        user_id = credentials.get("user_id")
-        vendor_id = credentials.get("vendor_id")
+        access_key = config.get("access_key")
+        secret_key = config.get("secret_key")
+        user_id = config.get("user_id")
+        vendor_id = config.get("vendor_id")
 
         if not access_key or not secret_key:
-            raise ValueError(f"API 키가 없습니다: {CONFIG_FILE}")
+            raise ValueError(f"API 키가 없습니다: {config_file}")
 
         if not user_id or not vendor_id:
-            raise ValueError(f"쿠폰 정보가 없습니다 (user_id, vendor_id 필수): {CONFIG_FILE}")
+            raise ValueError(f"쿠폰 정보가 없습니다 (user_id, vendor_id 필수): {config_file}")
 
         return access_key, secret_key, user_id, vendor_id
 
     @staticmethod
-    def load_credentials_to_env() -> None:
+    def get_installation_id(base_dir: Path) -> Optional[str]:
+        """
+        UUID만 반환
+
+        Args:
+            base_dir: 작업 디렉토리
+
+        Returns:
+            installation_id: 설치 UUID (없으면 None)
+        """
+        try:
+            config = ConfigManager.load_config(base_dir)
+            return config.get("installation_id")
+        except FileNotFoundError:
+            return None
+
+    @staticmethod
+    def load_credentials_to_env(base_dir: Path) -> None:
         """
         저장된 설정을 환경 변수로 로드합니다.
+
+        Args:
+            base_dir: 작업 디렉토리
 
         환경 변수:
             COUPANG_ACCESS_KEY: Access Key
@@ -131,7 +193,7 @@ class CredentialManager:
             COUPANG_USER_ID: WING 사용자 ID
             COUPANG_VENDOR_ID: 판매자 ID
         """
-        access_key, secret_key, user_id, vendor_id = CredentialManager.load_credentials()
+        access_key, secret_key, user_id, vendor_id = ConfigManager.load_credentials(base_dir)
 
         os.environ["COUPANG_ACCESS_KEY"] = access_key
         os.environ["COUPANG_SECRET_KEY"] = secret_key
@@ -169,3 +231,7 @@ class CredentialManager:
             )
 
         return access_key, secret_key, user_id, vendor_id
+
+
+# 레거시 호환성 (deprecated)
+CredentialManager = ConfigManager

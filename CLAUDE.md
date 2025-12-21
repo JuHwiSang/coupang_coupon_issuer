@@ -30,11 +30,13 @@
 - [ADR 005: systemd 서비스](docs/adr/005-systemd-service.md) - ~~스케줄링 전략, 로깅~~ (대체됨, ADR 010 참조)
 - [ADR 006: contract_id=-1 무료 예산](docs/adr/006-contract-id-negative-one.md) - 무료 예산 사용
 - [ADR 007: 쿠폰 발급 워크플로우](docs/adr/007-coupon-issuance-workflow.md) - 다단계 비동기 처리
-- [ADR 008: CLI 구조 재설계](docs/adr/008-cli-restructuring.md) - ~~5개 명령어~~, 4개 명령어, 전역 명령어, 로그 중심 운영
+- [ADR 008: CLI 구조 재설계](docs/adr/008-cli-restructuring.md) - ~~4개 명령어, 전역 명령어~~ (대체됨, ADR 014 참조)
 - [ADR 009: 엑셀 6컬럼 구조](docs/adr/009-excel-6-column-structure.md) - 할인금액/비율과 발급개수 분리
-- [ADR 010: Crontab 기반 스케줄링](docs/adr/010-crontab-service.md) - Cron 스케줄링, 사용자 수준 로그
+- [ADR 010: Crontab 기반 스케줄링](docs/adr/010-crontab-service.md) - ~~Cron 스케줄링, 사용자 수준 로그~~ (대체됨, ADR 014 참조)
 - [ADR 011: Jitter 기능](docs/adr/011-jitter-thundering-herd.md) - Thundering herd 방지
-- [ADR 012: XDG Base Directory](docs/adr/012-xdg-base-directory.md) - XDG 표준 준수, 멀티 유저 지원
+- [ADR 012: XDG Base Directory](docs/adr/012-xdg-base-directory.md) - ~~XDG 표준 준수~~ (대체됨, ADR 014 참조)
+- [ADR 013: PyInstaller 단일 실행 파일 배포](docs/adr/013-pyinstaller-single-binary.md) - ~~PyInstaller 배포~~ (대체됨, ADR 014 참조)
+- [ADR 014: 스크립트 기반 배포](docs/adr/014-script-based-deployment.md) - **현재 구조**, Python 스크립트 배포, 런타임 경로 지정
 
 ### 📝 문서 작성 규칙
 
@@ -52,10 +54,16 @@
 
 ## 환경
 
+### 개발 환경
 - **OS**: Linux (cron 자동 설치)
-- **Python**: 3.10+ (필수)
+- **Python**: 3.10+
 - **패키지**: requests, openpyxl
-- **로깅**: ~/.local/state/coupang_coupon_issuer/issuer.log
+- **개발 도구**: uv (패키지 관리)
+
+### 배포 환경 (스크립트 기반)
+- **OS**: Linux (cron 필요)
+- **Python**: 3.10+ 필수
+- **의존성**: requests, openpyxl 필요
 
 ### 지원 배포판
 
@@ -68,47 +76,78 @@ Python 3.10+ 요구사항으로 인해 다음 버전 이상에서만 동작합�
 
 ## 프로젝트 구조
 
+### 배포 후 구조 (스크립트 기반)
+
 ```
-# 설치 후 구조
+# 사용자 작업 디렉토리 (사용자가 원하는 위치)
+~/my-coupons/
+├── config.json                  # API 키 + UUID (600 권한)
+├── coupons.xlsx                 # 쿠폰 정의 (사용자 배치)
+└── issuer.log                   # 실행 로그 (자동 생성)
+
+# 프로젝트 소스 (별도 위치, 예: /opt/coupang_coupon_issuer)
 /opt/coupang_coupon_issuer/
-├── main.py                          # CLI 진입점
-├── src/coupang_coupon_issuer/
-│   ├── config.py                    # API 키 관리, XDG 경로 설정
-│   ├── coupang_api.py               # Coupang API 클라이언트 (HMAC-SHA256)
-│   ├── issuer.py                    # 쿠폰 발급 로직 (로그 출력만)
-│   └── service.py                   # Cron 설치/제거
-└── pyproject.toml
+├── main.py                      # CLI 진입점
+├── src/                         # 소스코드
+└── ...
+```
 
-/usr/local/bin/
-└── coupang_coupon_issuer            # 심볼릭 링크 → /opt/.../main.py
+**특징**:
+- 작업 디렉토리와 소스코드 분리
+- 작업 디렉토리는 런타임에 지정 (CLI 인자)
+- 디렉토리 이동 시 재설치 필요 (UUID 기반 자동 처리)
+- Python 3.10+ 필수
 
-~/.config/coupang_coupon_issuer/     # XDG_CONFIG_HOME (사용자 설정)
-├── credentials.json                 # API 키 (user 소유, 600)
-└── coupons.xlsx                     # 쿠폰 정의 (user 소유, 600)
+### 개발 디렉토리 구조
 
-~/.local/state/coupang_coupon_issuer/ # XDG_STATE_HOME (상태 파일)
-└── issuer.log                       # 로그 파일 (user 소유, 644)
+```
+# 소스코드
+main.py                          # CLI 진입점
+src/coupang_coupon_issuer/
+├── config.py                    # ConfigManager, 경로 해결 함수들
+├── coupang_api.py               # Coupang API 클라이언트 (HMAC-SHA256)
+├── issuer.py                    # 쿠폰 발급 로직
+├── jitter.py                    # Jitter 스케줄러
+└── service.py                   # Cron 설치/제거
 
-# 개발 디렉토리 구조
+# 문서
 docs/
-├── DEV_LOG.md                       # 작은 결정사항, 관례
-├── adr/                             # 아키텍처 결정 기록
-│   ├── 001-excel-structure.md      # (대체됨)
+├── DEV_LOG.md                   # 작은 결정사항, 관례
+├── adr/                         # 아키텍처 결정 기록
+│   ├── 001-excel-structure.md  # (대체됨)
 │   ├── 002-input-normalization.md
 │   ├── 003-api-authentication.md
 │   ├── 004-fixed-configuration-values.md
-│   ├── 005-systemd-service.md      # (대체됨)
+│   ├── 005-systemd-service.md  # (대체됨)
 │   ├── 006-contract-id-negative-one.md
 │   ├── 007-coupon-issuance-workflow.md
-│   ├── 008-cli-restructuring.md
+│   ├── 008-cli-restructuring.md  # (대체됨)
 │   ├── 009-excel-6-column-structure.md
-│   ├── 010-crontab-service.md
-│   ├── 011-jitter-thundering-herd.md  # Jitter 기능
-│   └── 012-xdg-base-directory.md   # XDG 표준 준수
-└── coupang/                         # Coupang API 규격 문서
+│   ├── 010-crontab-service.md  # (대체됨)
+│   ├── 011-jitter-thundering-herd.md
+│   ├── 012-xdg-base-directory.md  # (대체됨)
+│   ├── 013-pyinstaller-single-binary.md  # (대체됨)
+│   └── 014-script-based-deployment.md  # **현재 구조**
+└── coupang/                     # Coupang API 규격 문서
     ├── workflow.md
     ├── parameters-explained.md
     └── (각종 API 문서)
+
+# 테스트
+tests/
+├── conftest.py                  # 공통 fixture (간소화됨)
+├── unit/                        # 유닛 테스트 (~115개)
+│   ├── test_config.py           # ConfigManager (26개)
+│   ├── test_coupang_api.py      # API 클라이언트 (12개)
+│   ├── test_issuer.py           # 쿠폰 발급 로직 (32개)
+│   ├── test_service.py          # Cron 관리 (23개, Linux only)
+│   └── test_cli.py              # CLI 명령어 (21개)
+├── integration/                 # 통합 테스트 (24개 × 4 배포판 = 96개)
+│   ├── conftest.py              # Docker 인프라
+│   ├── test_verify.py
+│   ├── test_install.py
+│   └── test_uninstall.py
+└── fixtures/                    # 테스트 엑셀 파일
 ```
 
 ## Claude에게 작업 요청
@@ -122,6 +161,7 @@ docs/
 - 예외 처리 필수 (로깅 후 상위로 전파)
 - **Python 실행 시 uv 사용**: `uv run python script.py` 또는 `uv run pytest`
 - **cd 명령어 사용 금지**: 절대 경로만 사용
+- **경로 해결 전략**: base_dir 파라미터 명시적 전달, 기본값은 pwd (Path.cwd())
 
 ### 구현 가이드
 
@@ -131,40 +171,55 @@ docs/
 
 ### CLI 명령어
 
-설치 후 전역 명령어로 실행 가능:
+Python 스크립트 형태로 실행:
 
 ```bash
-# 1. 엑셀 파일 검증 및 적용 (sudo 불필요!)
-coupang_coupon_issuer apply ./coupons.xlsx
+# 1. 엑셀 파일 검증 및 미리보기 (테이블 형식)
+python3 main.py verify [디렉토리] [./coupons.xlsx]
+# 예시:
+python3 main.py verify .              # 현재 디렉토리
+python3 main.py verify ~/my-coupons   # 특정 디렉토리
+# → 9개 컬럼 (쿠폰이름, 쿠폰타입, 유효기간, 할인방식, 할인금액, 할인비율, 발급개수, 총 예산) 출력
 
 # 2. 단발성 쿠폰 발급 (테스트용)
-coupang_coupon_issuer issue
+python3 main.py issue [디렉토리]
+python3 main.py issue .               # 현재 디렉토리
+python3 main.py issue ~/my-coupons    # 특정 디렉토리
 
 # 2-1. Jitter 적용 (Thundering herd 방지)
-coupang_coupon_issuer issue --jitter-max 60  # 0-60분 랜덤 지연
+python3 main.py issue . --jitter-max 60  # 0-60분 랜덤 지연
 
-# 3. 서비스 설치
-sudo coupang_coupon_issuer install \
+# 3. 서비스 설치 (cron 등록) - 디렉토리 필수
+python3 main.py install ~/my-coupons \
   --access-key YOUR_KEY \
   --secret-key YOUR_SECRET \
   --user-id YOUR_USER_ID \
   --vendor-id YOUR_VENDOR_ID
 
 # 3-1. 서비스 설치 (Jitter 활성화)
-sudo coupang_coupon_issuer install \
+python3 main.py install ~/my-coupons \
   --access-key YOUR_KEY \
   --secret-key YOUR_SECRET \
   --user-id YOUR_USER_ID \
   --vendor-id YOUR_VENDOR_ID \
   --jitter-max 60  # 선택사항: 0-60분 랜덤 지연
 
-# 4. 서비스 제거
-sudo coupang_coupon_issuer uninstall
+# 4. 서비스 제거 (cron 제거)
+python3 main.py uninstall [디렉토리]
+python3 main.py uninstall .           # 현재 디렉토리
+python3 main.py uninstall ~/my-coupons
 
 # 서비스 관리
-crontab -l                                              # 스케줄 확인
-tail -f ~/.local/state/coupang_coupon_issuer/issuer.log # 로그 확인
+crontab -l                            # 스케줄 확인
+tail -f ~/my-coupons/issuer.log       # 로그 확인
 ```
+
+**주요 변경사항 (ADR 014)**:
+- Python 스크립트 실행: `python3 main.py` (PyInstaller 제거)
+- 디렉토리 인자 추가: 작업 디렉토리를 런타임에 지정
+- 기본값 pwd: 디렉토리 미지정 시 현재 디렉토리 사용 (install 제외, 필수)
+- UUID 기반 추적: 디렉토리 이동 시 재설치 자동 처리
+- 로그 위치: 작업 디렉토리 내 issuer.log
 
 **Jitter 기능 (ADR 011)**:
 - 여러 인스턴스 동시 실행 시 API 부하 분산 (Thundering herd 방지)
@@ -172,50 +227,74 @@ tail -f ~/.local/state/coupang_coupon_issuer/issuer.log # 로그 확인
 - 안전한 폴링 루프 (1초 간격, KeyboardInterrupt 처리)
 - 시작/종료 시점만 로그 출력
 
-### 환경 변수 (XDG Base Directory)
+### 경로 해결 전략 (base_dir 파라미터 전달)
 
-**ADR 012**: XDG Base Directory Specification 준수
+**ADR 014**: 함수 기반 경로 해결, base_dir를 명시적으로 전달
 
-기본 경로를 변경하려면 환경 변수를 설정하세요:
+```python
+# config.py
+from pathlib import Path
+from typing import Optional
 
-```bash
-# 설정 파일 위치 변경 (기본: ~/.config)
-export XDG_CONFIG_HOME=/custom/config
-coupang_coupon_issuer apply ./coupons.xlsx
-# → /custom/config/coupang_coupon_issuer/coupons.xlsx
+def get_base_dir(work_dir: Optional[Path] = None) -> Path:
+    """작업 디렉토리 경로 반환 (기본: 현재 디렉토리)"""
+    if work_dir is None:
+        return Path.cwd().resolve()
+    return Path(work_dir).resolve()
 
-# 로그 파일 위치 변경 (기본: ~/.local/state)
-export XDG_STATE_HOME=/var/log/myapp
-coupang_coupon_issuer issue
-# → /var/log/myapp/coupang_coupon_issuer/issuer.log
+def get_config_file(base_dir: Path) -> Path:
+    return base_dir / "config.json"
+
+def get_excel_file(base_dir: Path) -> Path:
+    return base_dir / "coupons.xlsx"
+
+def get_log_file(base_dir: Path) -> Path:
+    return base_dir / "issuer.log"
+
+# ConfigManager 메서드들은 base_dir를 첫 번째 파라미터로 받음
+class ConfigManager:
+    @staticmethod
+    def save_config(base_dir: Path, access_key: str, ...) -> str:
+        config_file = get_config_file(base_dir)
+        # ...
+
+    @staticmethod
+    def load_config(base_dir: Path) -> dict:
+        config_file = get_config_file(base_dir)
+        # ...
 ```
 
-**기본 경로**:
-- 설정: `~/.config/coupang_coupon_issuer/` (credentials.json, coupons.xlsx)
-- 로그: `~/.local/state/coupang_coupon_issuer/` (issuer.log)
+**중요**:
+- 모든 모듈이 `base_dir` 파라미터를 명시적으로 받음
+- 기본값은 `Path.cwd()` (현재 작업 디렉토리)
+- PyInstaller 의존성 완전 제거
 
-**멀티 유저 지원**: 각 사용자가 독립적으로 설정/로그 관리 가능
+### config.json 구조 (UUID 포함)
 
-### 다음 구현 작업
+```json
+{
+  "access_key": "...",
+  "secret_key": "...",
+  "user_id": "...",
+  "vendor_id": "...",
+  "installation_id": "a3f8d9c2-4b1e-4a7c-9d3f-8e2b1a5c7d9e"
+}
+```
 
-- [x] CLI 구조 재설계 (4개 명령어)
-- [x] 엑셀 결과 출력 제거 (로그로만)
-- [x] 전역 명령어 구현 (심볼릭 링크)
-- [x] install 4개 파라미터 확장
-- [x] Docker 테스트 환경 구성
-- [x] 테스트 작성 (pytest + requests-mock + testcontainers)
-- [x] Crontab 기반 스케줄링으로 전환
-- [x] Jitter 기능 (Thundering herd 방지)
-- [x] XDG Base Directory 표준 적용 (멀티 유저 지원)
-- [ ] 성능 최적화 (병렬 처리, 선택사항)
+**UUID 용도**:
+- install 시 생성 (첫 설치 시)
+- crontab 주석에 포함: `# coupang_coupon_issuer_job:<uuid>`
+- uninstall 시 이 UUID로 항목 검색/삭제
+- 재설치 시 기존 UUID 항목 자동 제거 → 새 경로로 재등록
 
-## 디버깅
+### 디버깅
 
 로그 확인 시:
 ```bash
-tail -f ~/.local/state/coupang_coupon_issuer/issuer.log
+# 작업 디렉토리에서 로그 확인
+tail -f ~/my-coupons/issuer.log
 # 또는
-cat ~/.local/state/coupang_coupon_issuer/issuer.log | grep ERROR
+cat ~/my-coupons/issuer.log | grep ERROR
 ```
 
 에러 스택 트레이스와 함께 파일명:라인번호 포함하여 요청
@@ -225,60 +304,72 @@ cat ~/.local/state/coupang_coupon_issuer/issuer.log | grep ERROR
 ### 핵심 기능
 - [x] API 클라이언트 (coupang_api.py)
 - [x] HMAC-SHA256 인증 구현
-- [x] 엑셀 I/O (5개 컬럼 + 입력 정규화)
+- [x] 엑셀 I/O (6개 컬럼 + 입력 정규화)
 - [x] issue() 메서드 실제 로직
 - [x] 고정값 설정 (예산, 유효기간, contract_id 등)
 - [x] 사용자 입력 오류 용인 로직
 
 ### CLI 및 배포
-- [x] CLI 구조 재설계 (apply/issue/install/uninstall - 4개 명령어)
-- [x] 전역 명령어 (심볼릭 링크)
-- [x] install 4개 파라미터 확장
-- [x] 엑셀 결과 출력 제거 (로그 중심)
-- [x] Docker 테스트 환경 (docker-compose.test.yml)
-- [x] Cron 기반 스케줄링 (systemd 제거)
+- [x] CLI 구조 재설계 (verify/issue/install/uninstall - 4개 명령어)
+- [x] 스크립트 기반 배포 (PyInstaller 제거, ADR 014)
+- [x] 런타임 경로 지정 (base_dir 파라미터)
+- [x] UUID 기반 cron 추적
+- [x] apply → verify 변경 (테이블 형식 출력)
+- [x] Cron 기반 스케줄링
+- [x] Jitter 기능 (Thundering herd 방지)
+- [x] 설치 단순화 (7단계 → 3단계)
 
 ### 문서화
 - [x] DEV_LOG (로깅 규칙, 검증 규칙 등)
-- [x] ADR 001-010 (아키텍처 결정 기록)
+- [x] ADR 001-014 (아키텍처 결정 기록)
 - [x] Coupang API 문서 (workflow, parameters 등)
 
 ### 테스트
-- [x] 유닛 테스트 작성 (pytest + requests-mock)
-  - **유닛 테스트**: 95개 (scheduler 삭제 -14개, service 재작성 +8개)
-  - **Windows 테스트 결과** (2024-12-19 - Cron 마이그레이션 완료):
-    - ✅ test_config.py: 18/18 통과 (100%, LOG_DIR/LOG_FILE 추가)
-    - ✅ test_coupang_api.py: 12/12 통과 (100%)
-    - ✅ test_cli.py: 18/18 통과 (100%, serve 테스트 제거)
-    - ✅ test_issuer.py: 32/32 통과 (100%)
-    - ✅ test_service.py: 28/28 재작성 완료 (CrontabService, Linux only)
-  - **커버리지**: config/api/issuer 94%+
+- [x] 유닛 테스트 재작성 (pytest + requests-mock)
+  - **유닛 테스트**: ~115개
+  - **Windows 테스트 결과** (2024-12-21 - 스크립트 기반 마이그레이션):
+    - ✅ test_config.py: 26개 - ConfigManager + UUID + base_dir (100%) **[ADR 014 완료]**
+    - ✅ test_coupang_api.py: 12개 - HMAC 인증 (100%)
+    - ⏳ test_cli.py: 21개 - verify/issue/install/uninstall 명령어 **[작업 필요]**
+    - ⏳ test_issuer.py: 32개 - 쿠폰 발급 로직 **[작업 필요]**
+    - ⏳ test_service.py: 23개 - UUID 기반 cron 관리 (Linux only) **[작업 필요]**
+  - **커버리지**: config/api/issuer/service 94%+ (목표)
   - **테스트 실행**: `uv run pytest tests/unit -v`
   - **커버리지 확인**: `uv run pytest --cov=src/coupang_coupon_issuer`
 
-- [x] 통합 테스트 재작성 및 실행 완료 (cron 기반)
-  - **통합 테스트**: 20개 기본 (systemd 35개 → cron 20개로 단순화)
-    - test_service_install.py: 11개 테스트 (cron job, 파일, credentials)
-    - test_service_uninstall.py: 6개 테스트 (cron job 제거, 파일 삭제 프롬프트)
-    - test_end_to_end.py: 3개 테스트 (E2E 워크플로우, 스케줄 정확성)
-  - **다중 배포판 테스트**: 4가지 이미지 × 20개 = 80개 테스트
+- [ ] 통합 테스트 재작성 (Docker + Python 스크립트)
+  - **통합 테스트**: 24개 기본 테스트 × 4개 배포판 = **96개 자동 실행** (목표)
+  - **테스트 파일**:
+    - test_verify.py: 6개 - verify 명령어 (엑셀 검증, 출력 형식)
+    - test_install.py: 11개 - install 명령어 (config, cron, UUID, jitter)
+    - test_uninstall.py: 7개 - uninstall 명령어 (UUID 기반 제거, 파일 보존)
+  - **다중 배포판 자동 테스트** (pytest parametrize):
     - Ubuntu 24.04 (Noble, Python 3.12)
     - Ubuntu 22.04 (Jammy, Python 3.10)
     - Debian 13 (Trixie, Python 3.12)
     - Debian 12 (Bookworm, Python 3.11)
-  - **testcontainers 인프라**: 사전 빌드 이미지로 대폭 성능 개선
-  - **실행 환경**: Docker Desktop 필요 (WSL2 backend)
+  - **핵심 기능** (예정):
+    - ~~PyInstaller 빌드 자동화~~ → Python 스크립트 직접 실행
+    - PEP 668 대응: 배포판별 `--break-system-packages` 자동 처리
+    - Read-only 마운트 (/mnt/src → /app 복사, 보안 강화)
+    - 사전 빌드 이미지 재사용 (빌드 1회, 재사용으로 속도 대폭 개선)
+  - **테스트 환경**: Docker Desktop 필요 (WSL2 backend)
   - **테스트 실행**: `uv run pytest tests/integration -v -m integration`
-  - **주요 기능**:
-    - parametrize로 다중 배포판 자동 테스트
-    - PEP 668 대응: Dockerfile 내 `--break-system-packages` 빌트인
-    - Docker exec 명령어 `["bash", "-c", "command"]` 형식으로 쉘 기능 지원
-    - **사전 빌드 이미지**: 한 번 빌드하면 재사용 → 테스트 속도 **약 74% 단축**
-      - 이전: 매 테스트마다 pip install (테스트당 약 13.9초)
-      - 현재: 빌드된 이미지 재사용 (테스트당 약 3.6초)
-      - 소스코드는 volume 마운트 (이미지에 포함하지 않음)
+  - **테스트 시간 (예상)**:
+    - ~~첫 실행 (PyInstaller 빌드): 약 6-7분~~ → 첫 실행: 약 1-2분
+    - 이후 실행: 약 1-2분 (96개 테스트)
+  - **E2E 검증**: 수동 테스트로 대체 (Ubuntu 22.04)
 
-### 향후 작업
+### 향후 작업 (ADR 014 마이그레이션)
+- [x] 핵심 코드 PyInstaller 제거 (config, main, service, issuer)
+- [x] test_config.py 업데이트 (26개)
+- [x] ADR 014 문서화
+- [x] CLAUDE.md 업데이트
+- [ ] test_issuer.py 업데이트 (~32개)
+- [ ] test_service.py 업데이트 (~23개)
+- [ ] test_cli.py 업데이트 (~21개)
+- [ ] 통합 테스트 간소화 (PyInstaller 빌드 제거)
+- [ ] 수동 E2E 검증 (Ubuntu 22.04)
 - [ ] 성능 최적화 (병렬 처리, 선택사항)
 
 ## 테스트 가이드
@@ -287,23 +378,23 @@ cat ~/.local/state/coupang_coupon_issuer/issuer.log | grep ERROR
 
 ```
 tests/
-├── conftest.py                   # 공통 fixture (credentials, excel, mock API)
-├── fixtures/                     # 테스트용 엑셀 파일
+├── conftest.py                  # 공통 fixture (PyInstaller mock 포함)
+├── fixtures/                    # 테스트용 엑셀 파일
 │   ├── sample_valid.xlsx
 │   ├── sample_invalid_columns.xlsx
 │   ├── sample_invalid_rates.xlsx
 │   └── sample_invalid_prices.xlsx
-├── unit/                         # 유닛 테스트 (108개)
-│   ├── test_config.py            # CredentialManager 테스트 (18개)
-│   ├── test_coupang_api.py       # API 클라이언트 + HMAC (12개)
-│   ├── test_issuer.py            # 쿠폰 발급 로직 (32개)
-│   ├── test_service.py           # Cron 관리 (28개, Linux only)
-│   └── test_cli.py               # CLI 명령어 (18개)
-└── integration/                  # 통합 테스트 (80개, Docker 필요)
-    ├── conftest.py               # testcontainers 인프라 (다중 배포판 parametrize)
-    ├── test_service_install.py   # 설치 프로세스 (11개 × 4 이미지 = 44개)
-    ├── test_service_uninstall.py # 제거 프로세스 (6개 × 4 이미지 = 24개)
-    └── test_end_to_end.py        # E2E 워크플로우 (3개 × 4 이미지 = 12개)
+├── unit/                        # 유닛 테스트 (121개)
+│   ├── test_config.py           # ConfigManager + UUID 테스트 (33개)
+│   ├── test_coupang_api.py      # API 클라이언트 + HMAC (12개)
+│   ├── test_issuer.py           # 쿠폰 발급 로직 (32개)
+│   ├── test_service.py          # Cron 관리 (UUID 기반, 23개, Linux only)
+│   └── test_cli.py              # CLI 명령어 (21개 - verify/issue/install/uninstall)
+└── integration/                 # 통합 테스트 (24개 × 4 배포판 = 96개)
+    ├── conftest.py              # Docker + PyInstaller 인프라
+    ├── test_verify.py           # verify 명령어 (6개)
+    ├── test_install.py          # install 명령어 (11개)
+    └── test_uninstall.py        # uninstall 명령어 (7개)
 ```
 
 ### 테스트 실행 명령어
@@ -328,62 +419,121 @@ uv run pytest tests/unit/test_issuer.py -v
 ### Windows vs Linux 테스트
 
 - **유닛 테스트**:
-  - Windows 환경: 108개 중 80개 실행 (service.py 28개 스킵)
-  - Linux 환경: 108개 전부 실행 가능
+  - Windows 환경: 121개 중 98개 실행 (service.py 23개 스킵)
+  - Linux 환경: 121개 전부 실행 가능
 - **통합 테스트**:
   - Windows: Docker Desktop(WSL2) 필요
   - Linux: Docker만 필요
-  - **다중 배포판 테스트**: 4개 이미지 × 20개 = 80개 테스트 자동 실행
-  - **테스트 시간** (사전 빌드 이미지 사용):
-    - 첫 실행 (이미지 빌드): 약 5-6분
-    - 이후 실행 (캐시 재사용): 약 3-4분 **(44% 단축)**
+  - **다중 배포판 테스트**: 24개 × 4개 배포판 = 96개 자동 실행
+  - **테스트 시간**: 약 7분 (사전 빌드 이미지 재사용 시)
 
-### 다중 배포판 테스트
+### 테스트 Fixture
 
-통합 테스트는 pytest parametrize로 여러 배포판에서 자동 실행됩니다:
-
+**유닛 테스트 Fixture** (tests/conftest.py):
 ```python
-# tests/integration/conftest.py
-@pytest.fixture(
-    scope="session",
-    params=[
-        "ubuntu:24.04",  # Noble Numbat, Python 3.12
-        "ubuntu:22.04",  # Jammy Jellyfish, Python 3.10
-        "debian:13",     # Trixie, Python 3.12
-        "debian:12",     # Bookworm, Python 3.11
-    ]
-)
-def cron_container(request):
-    base_image = request.param
-    # Get or build pre-configured image
-    test_image = get_or_build_image(base_image)
-    # ... 컨테이너 setup
+@pytest.fixture
+def mock_config_paths(tmp_path):
+    """작업 디렉토리 (더 이상 PyInstaller 모킹 불필요)"""
+    return tmp_path
+
+# ADR 014: PyInstaller 관련 fixture 제거됨
+# - mock_frozen 삭제 (더 이상 sys.frozen 체크 없음)
+# - 경로 모킹 불필요 (base_dir 직접 전달)
 ```
 
-**사전 빌드 이미지 최적화:**
-- `get_or_build_image()`: 이미지가 존재하면 재사용, 없으면 빌드
-- 이미지 내용: Python 3 + pip + sudo + cron + requests + openpyxl + pytest
-- 소스코드는 제외: volume 마운트로 `/app`에 연결
-- PEP 668 대응: Dockerfile 내에서 배포판별로 적절한 pip 명령어 사용
-  - Ubuntu 24.04, Debian 13, Debian 12: `pip install --break-system-packages`
-  - Ubuntu 22.04: `pip install` (플래그 없이)
-- **성능 개선**: 테스트 속도 약 74% 단축 (13.9초 → 3.6초/테스트)
-- **이미지 관리**: `docker images | grep coupang-coupon-issuer-test`로 확인
-- **이미지 재빌드**: `docker rmi coupang-coupon-issuer-test:<tag>` 후 테스트 재실행
+**통합 테스트 Fixture** (tests/integration/conftest.py) - **업데이트 필요**:
+```python
+@pytest.fixture(scope="session", params=[
+    "ubuntu:24.04",  # Noble Numbat, Python 3.12
+    "ubuntu:22.04",  # Jammy Jellyfish, Python 3.10
+    "debian:13",     # Trixie, Python 3.12
+    "debian:12",     # Bookworm, Python 3.11
+])
+def test_image(request):
+    """다중 배포판 자동 테스트 (pytest parametrize)"""
+    base_image = request.param
+    return get_or_build_image(base_image)  # 사전 빌드 이미지 재사용
+
+@pytest.fixture
+def test_container(test_image):
+    """Docker 컨테이너 + Python 환경"""
+    container = DockerContainer(test_image)
+    # Read-only mount (보안 강화)
+    container.with_volume_mapping(str(project_root), "/app", mode="ro")
+    container.start()
+
+    # 의존성 설치 (pip install -e .)
+    container.exec(["bash", "-c", "cd /app && pip3 install -e ."])
+
+    # Start cron service
+    container.exec(["service", "cron", "start"])
+    return container
+
+# ADR 014: PyInstaller 빌드 fixture 제거
+# - built_binary 삭제 (더 이상 PyInstaller 빌드 불필요)
+# - python3 /app/main.py 직접 실행
+```
 
 ### 테스트 작성 규칙
 
 1. **Mock 사용**
    - requests-mock: HTTP API 호출
    - pytest-mock: 일반 객체 모킹
+   - ~~monkeypatch: PyInstaller 환경 시뮬레이션~~ (ADR 014에서 제거)
 
-2. **Fixture 활용**
-   - `temp_credentials`: 임시 credentials.json
-   - `valid_excel`: 유효한 5컬럼 엑셀
+2. **Fixture 활용** (유닛 테스트)
+   - `mock_config_paths`: 작업 디렉토리 (tmp_path 반환)
+   - ~~`mock_frozen`: PyInstaller 환경 시뮬레이션~~ (제거됨)
+   - `valid_excel`: 유효한 6컬럼 엑셀
    - `mock_coupang_api`: Coupang API 응답 모킹
 
-3. **테스트 마커**
+3. **Fixture 활용** (통합 테스트)
+   - `test_image`: 다중 배포판 자동 테스트 (pytest parametrize)
+   - `test_container`: Docker 컨테이너 + Python 환경
+   - ~~`built_binary`: PyInstaller 빌드 자동화~~ (제거 예정)
+   - `clean_install_dir`: 깨끗한 설치 디렉토리
+   - `container_exec`: 컨테이너 명령어 실행 헬퍼
+   - `sample_excel`: 샘플 엑셀 파일 생성
+
+4. **테스트 마커**
    - `@pytest.mark.unit`: 유닛 테스트
-   - `@pytest.mark.integration`: 통합 테스트
+   - `@pytest.mark.integration`: 통합 테스트 (Docker 필요)
    - `@pytest.mark.slow`: 느린 테스트 (> 1초)
    - Windows 스킵: `pytestmark = pytest.mark.skipif(os.name == 'nt', ...)` 사용
+
+5. **Docker 통합 테스트 특징** (업데이트 예정)
+   - **사전 빌드 이미지 재사용**: 한 번 빌드하면 재사용 (빌드 시간 대폭 단축)
+   - **PEP 668 자동 처리**: 배포판별로 적절한 pip 명령어 사용
+   - **Read-only 마운트**: 소스코드 보안 강화 (직접 /app 마운트)
+   - ~~**PyInstaller 빌드 자동화**~~ → Python 스크립트 직접 실행
+   - **Cron 서비스 자동 시작**: 각 컨테이너마다 cron 서비스 실행
+   - **UUID 기반 테스트**: installation_id 검증, 재설치 시나리오
+
+## 배포 가이드 (스크립트 기반)
+
+**ADR 014**: Python 스크립트로 직접 실행
+
+```bash
+# 1. 프로젝트 클론
+git clone <repository>
+cd coupang_coupon_issuer
+
+# 2. 의존성 설치
+pip3 install -e .
+# 또는
+pip3 install requests openpyxl
+
+# 3. 작업 디렉토리 생성
+mkdir ~/my-coupons
+cp coupons.xlsx ~/my-coupons/
+
+# 4. 서비스 설치
+python3 main.py install ~/my-coupons \
+  --access-key YOUR_KEY \
+  --secret-key YOUR_SECRET \
+  --user-id YOUR_USER_ID \
+  --vendor-id YOUR_VENDOR_ID
+
+# 5. 로그 확인
+tail -f ~/my-coupons/issuer.log
+```

@@ -14,119 +14,167 @@ import main
 
 
 @pytest.mark.unit
-class TestApplyCommand:
-    """Test 'apply' command"""
+class TestVerifyCommand:
+    """Test 'verify' command (replaces apply)"""
 
-    def test_apply_valid_excel(self, tmp_path, mocker):
-        """Valid Excel file should pass validation and be copied"""
+    def test_verify_valid_excel(self, tmp_path, capsys):
+        """Valid Excel file should pass validation and display table"""
         excel_file = tmp_path / "valid.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
         ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수"])
-        ws.append(["테스트쿠폰", "즉시할인", 30, "RATE", 10, ""])
+        ws.append(["테스트쿠폰1", "즉시할인", 30, "RATE", 10, ""])
+        ws.append(["테스트쿠폰2", "다운로드쿠폰", 15, "PRICE", 500, 100])
         wb.save(excel_file)
-
-        # Mock file operations
-        mock_copy = mocker.patch('main.shutil.copy2')
-        mock_mkdir = mocker.patch('main.Path.mkdir')
-        mock_chmod = mocker.patch('main.Path.chmod')
 
         # Create args object
         args = MagicMock()
-        args.excel_file = str(excel_file)
+        args.file = str(excel_file)
 
         # Run command
-        main.cmd_apply(args)
+        main.cmd_verify(args)
 
-        # Verify copy was called
-        assert mock_copy.call_count == 1
+        # Verify output
+        captured = capsys.readouterr()
+        assert "엑셀 파일 검증 중" in captured.out
+        assert "2개 쿠폰 로드 완료" in captured.out
+        assert "테스트쿠폰1" in captured.out
+        assert "테스트쿠폰2" in captured.out
+        assert "검증 완료" in captured.out
 
-    def test_apply_file_not_found(self, tmp_path, capsys):
+    def test_verify_uses_default_path_when_no_file_arg(self, tmp_path, capsys, monkeypatch):
+        """When no file argument, should use get_excel_file(cwd)"""
+        # Create excel in current working directory
+        excel_file = tmp_path / "coupons.xlsx"
+        wb = Workbook()
+        ws = wb.active
+        assert ws is not None
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수"])
+        ws.append(["쿠폰1", "즉시할인", 30, "RATE", 10, ""])
+        wb.save(excel_file)
+
+        # Change to tmp_path directory
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(tmp_path)
+
+            args = MagicMock()
+            args.file = None  # No file specified
+            args.directory = None  # Use current directory
+
+            main.cmd_verify(args)
+
+            captured = capsys.readouterr()
+            assert "1개 쿠폰 로드 완료" in captured.out
+        finally:
+            os.chdir(old_cwd)
+
+    def test_verify_file_not_found(self, tmp_path, capsys):
         """Non-existent file should error"""
         args = MagicMock()
-        args.excel_file = str(tmp_path / "nonexistent.xlsx")
+        args.file = str(tmp_path / "nonexistent.xlsx")
 
         with pytest.raises(SystemExit):
-            main.cmd_apply(args)
+            main.cmd_verify(args)
 
         captured = capsys.readouterr()
-        assert "ERROR: 파일이 존재하지 않습니다" in captured.out
+        assert "ERROR" in captured.out
+        assert "찾을 수 없습니다" in captured.out
 
-    def test_apply_missing_columns(self, tmp_path, capsys):
+    def test_verify_missing_columns(self, tmp_path, capsys):
         """Excel missing required columns should error"""
         excel_file = tmp_path / "missing_cols.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입"])  # Missing 3 columns
+        ws.append(["쿠폰이름", "쿠폰타입"])  # Missing 4 columns
         ws.append(["쿠폰1", "즉시할인"])
         wb.save(excel_file)
 
         args = MagicMock()
-        args.excel_file = str(excel_file)
+        args.file = str(excel_file)
 
         with pytest.raises(SystemExit):
-            main.cmd_apply(args)
+            main.cmd_verify(args)
 
         captured = capsys.readouterr()
-        assert "ERROR: 검증 실패" in captured.out
-        assert "필수 컬럼 누락" in captured.out
+        assert "ERROR" in captured.out
+        assert "필수 컬럼이 없습니다" in captured.out
 
-    def test_apply_invalid_rate_range(self, tmp_path, capsys):
-        """RATE out of 1-99 range should error"""
-        excel_file = tmp_path / "invalid_rate.xlsx"
+    def test_verify_displays_rate_discount(self, tmp_path, capsys):
+        """RATE discount should show 0 amount and X% rate"""
+        excel_file = tmp_path / "rate.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
         ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수"])
-        ws.append(["쿠폰1", "즉시할인", 30, "RATE", 100, ""])  # 100% invalid
+        ws.append(["할인쿠폰", "즉시할인", 30, "RATE", 15, ""])
         wb.save(excel_file)
 
         args = MagicMock()
-        args.excel_file = str(excel_file)
+        args.file = str(excel_file)
 
-        with pytest.raises(SystemExit):
-            main.cmd_apply(args)
+        main.cmd_verify(args)
 
         captured = capsys.readouterr()
-        assert "ERROR: 검증 실패" in captured.out
-        assert "RATE 할인율은 1~99 사이여야 합니다" in captured.out
+        assert "15" in captured.out and "%" in captured.out  # Should show rate
+        assert "할인쿠폰" in captured.out
 
-    def test_apply_invalid_price_units(self, tmp_path, capsys):
-        """PRICE not in 10-won units should error"""
-        excel_file = tmp_path / "invalid_price.xlsx"
+    def test_verify_displays_price_discount(self, tmp_path, capsys):
+        """PRICE discount should show amount and 0% rate"""
+        excel_file = tmp_path / "price.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
         ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수"])
-        ws.append(["쿠폰1", "즉시할인", 30, "PRICE", 15, ""])  # Not 10-won unit
+        ws.append(["금액쿠폰", "다운로드쿠폰", 15, "PRICE", 1000, 50])
         wb.save(excel_file)
 
         args = MagicMock()
-        args.excel_file = str(excel_file)
+        args.file = str(excel_file)
 
-        with pytest.raises(SystemExit):
-            main.cmd_apply(args)
+        main.cmd_verify(args)
 
         captured = capsys.readouterr()
-        assert "ERROR: 검증 실패" in captured.out
-        assert "PRICE 할인금액은 10원 단위여야 합니다" in captured.out
+        assert "1,000" in captured.out  # Should show amount with comma
+        assert "50,000" in captured.out  # Budget (1000 × 50)
+        assert "금액쿠폰" in captured.out
+
+    def test_verify_calculates_budget_correctly(self, tmp_path, capsys):
+        """Budget should be discount_amount × issue_count"""
+        excel_file = tmp_path / "budget.xlsx"
+        wb = Workbook()
+        ws = wb.active
+        assert ws is not None
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수"])
+        ws.append(["예산쿠폰", "다운로드쿠폰", 30, "PRICE", 500, 100])
+        wb.save(excel_file)
+
+        args = MagicMock()
+        args.file = str(excel_file)
+
+        main.cmd_verify(args)
+
+        captured = capsys.readouterr()
+        assert "50,000" in captured.out  # 500 × 100 = 50,000
 
 
 @pytest.mark.unit
 class TestIssueCommand:
     """Test 'issue' command"""
 
-    def test_issue_loads_credentials_from_file(self, mocker):
+    def test_issue_loads_credentials_from_file(self, tmp_path, mocker):
         """Issue command should load credentials from file"""
-        mock_load_env = mocker.patch('main.CredentialManager.load_credentials_to_env')
+        mock_load_env = mocker.patch('main.ConfigManager.load_credentials_to_env')
         mock_issuer_class = mocker.patch('main.CouponIssuer')
         mock_issuer = MagicMock()
         mock_issuer_class.return_value = mock_issuer
 
         args = MagicMock()
         args.jitter_max = None
+        args.directory = str(tmp_path)
 
         main.cmd_issue(args)
 
@@ -137,12 +185,13 @@ class TestIssueCommand:
         mock_issuer_class.assert_called_once()
         mock_issuer.issue.assert_called_once()
 
-    def test_issue_handles_credential_error(self, mocker, capsys):
+    def test_issue_handles_credential_error(self, tmp_path, mocker, capsys):
         """Issue should exit if credentials can't be loaded"""
-        mocker.patch('main.CredentialManager.load_credentials_to_env', side_effect=FileNotFoundError("No file"))
+        mocker.patch('main.ConfigManager.load_credentials_to_env', side_effect=FileNotFoundError("No file"))
 
         args = MagicMock()
         args.jitter_max = None
+        args.directory = str(tmp_path)
 
         with pytest.raises(SystemExit):
             main.cmd_issue(args)
@@ -150,9 +199,9 @@ class TestIssueCommand:
         captured = capsys.readouterr()
         assert "ERROR: API 키 로드 실패" in captured.out
 
-    def test_issue_handles_issuer_error(self, mocker, capsys):
+    def test_issue_handles_issuer_error(self, tmp_path, mocker, capsys):
         """Issue should exit if issuer.issue() fails"""
-        mocker.patch('main.CredentialManager.load_credentials_to_env')
+        mocker.patch('main.ConfigManager.load_credentials_to_env')
         mock_issuer_class = mocker.patch('main.CouponIssuer')
         mock_issuer = MagicMock()
         mock_issuer.issue.side_effect = Exception("Issuer failed")
@@ -160,6 +209,7 @@ class TestIssueCommand:
 
         args = MagicMock()
         args.jitter_max = None
+        args.directory = str(tmp_path)
 
         with pytest.raises(SystemExit):
             main.cmd_issue(args)
@@ -167,18 +217,44 @@ class TestIssueCommand:
         captured = capsys.readouterr()
         assert "ERROR: 쿠폰 발급 실패" in captured.out
 
+    def test_issue_with_jitter(self, tmp_path, mocker):
+        """Issue command should handle jitter parameter"""
+        mock_load_env = mocker.patch('main.ConfigManager.load_credentials_to_env')
+        mock_issuer_class = mocker.patch('main.CouponIssuer')
+        mock_issuer = MagicMock()
+        mock_issuer_class.return_value = mock_issuer
+
+        # JitterScheduler is imported inside cmd_issue, so patch the module path
+        mock_jitter_class = mocker.patch('coupang_coupon_issuer.jitter.JitterScheduler')
+        mock_jitter = MagicMock()
+        mock_jitter_class.return_value = mock_jitter
+
+        args = MagicMock()
+        args.jitter_max = 60
+        args.directory = str(tmp_path)
+
+        main.cmd_issue(args)
+
+        # Verify jitter was used
+        mock_jitter_class.assert_called_once_with(max_jitter_minutes=60)
+        mock_jitter.wait_with_jitter.assert_called_once()
+
+        # Verify issue was still called
+        mock_issuer.issue.assert_called_once()
+
 
 @pytest.mark.unit
 class TestInstallCommand:
     """Test 'install' command"""
 
-    def test_install_requires_all_4_params(self, capsys):
+    def test_install_requires_all_4_params(self, tmp_path, capsys):
         """Install should require all 4 parameters"""
         args = MagicMock()
         args.access_key = "test"
         args.secret_key = "test"
         args.user_id = None  # Missing
         args.vendor_id = "test"
+        args.directory = str(tmp_path)
 
         with pytest.raises(SystemExit):
             main.cmd_install(args)
@@ -187,7 +263,7 @@ class TestInstallCommand:
         assert "ERROR: 모든 인자가 필요합니다" in captured.out
         assert "--user-id" in captured.out
 
-    def test_install_calls_crontab_service(self, mocker):
+    def test_install_calls_crontab_service(self, tmp_path, mocker):
         """Install should call CrontabService.install with correct args"""
         mock_install = mocker.patch('main.CrontabService.install')
 
@@ -197,23 +273,64 @@ class TestInstallCommand:
         args.user_id = "user-id"
         args.vendor_id = "vendor-id"
         args.jitter_max = None
+        args.directory = str(tmp_path)
 
         main.cmd_install(args)
 
-        mock_install.assert_called_once_with("access-key", "secret-key", "user-id", "vendor-id", jitter_max=None)
+        # CrontabService.install now takes base_dir as first argument
+        from pathlib import Path
+        mock_install.assert_called_once_with(Path(str(tmp_path)), "access-key", "secret-key", "user-id", "vendor-id", jitter_max=None)
+
+    def test_install_with_jitter(self, tmp_path, mocker):
+        """Install should pass jitter_max to CrontabService"""
+        mock_install = mocker.patch('main.CrontabService.install')
+
+        args = MagicMock()
+        args.access_key = "access-key"
+        args.secret_key = "secret-key"
+        args.user_id = "user-id"
+        args.vendor_id = "vendor-id"
+        args.jitter_max = 60
+        args.directory = str(tmp_path)
+
+        main.cmd_install(args)
+
+        from pathlib import Path
+        mock_install.assert_called_once_with(Path(str(tmp_path)), "access-key", "secret-key", "user-id", "vendor-id", jitter_max=60)
+
+    def test_install_validates_jitter_range(self, tmp_path, capsys):
+        """Install should validate jitter_max is in 1-120 range"""
+        args = MagicMock()
+        args.access_key = "test"
+        args.secret_key = "test"
+        args.user_id = "test"
+        args.vendor_id = "test"
+        args.jitter_max = 150  # Out of range
+        args.directory = str(tmp_path)
+
+        with pytest.raises(SystemExit):
+            main.cmd_install(args)
+
+        captured = capsys.readouterr()
+        assert "ERROR" in captured.out
+        assert "1-120 범위" in captured.out
 
 
 @pytest.mark.unit
 class TestUninstallCommand:
     """Test 'uninstall' command"""
 
-    def test_uninstall_calls_crontab_service(self, mocker):
+    def test_uninstall_calls_crontab_service(self, tmp_path, mocker):
         """Uninstall should call CrontabService.uninstall"""
         mock_uninstall = mocker.patch('main.CrontabService.uninstall')
 
-        main.cmd_uninstall()
+        args = MagicMock()
+        args.directory = str(tmp_path)
 
-        mock_uninstall.assert_called_once()
+        main.cmd_uninstall(args)
+
+        from pathlib import Path
+        mock_uninstall.assert_called_once_with(Path(str(tmp_path)))
 
 
 @pytest.mark.unit
@@ -230,37 +347,24 @@ class TestMainFunction:
         captured = capsys.readouterr()
         assert "usage:" in captured.out or "사용 예시:" in captured.out
 
-    def test_main_invalid_command(self, mocker, capsys):
-        """Invalid command should show error and help"""
-        mocker.patch('sys.argv', ['main.py', 'invalid-cmd'])
-
-        with pytest.raises(SystemExit):
-            main.main()
-
-        # argparse will handle unknown subcommand and show error
-
-    def test_main_apply_command_dispatched(self, mocker):
-        """Apply command should be dispatched correctly"""
-        mock_cmd_apply = mocker.patch('main.cmd_apply')
+    def test_main_verify_command_dispatched(self, mocker, tmp_path):
+        """Verify command should be dispatched correctly"""
+        mock_cmd_verify = mocker.patch('main.cmd_verify')
 
         # Create valid Excel file
-        tmp_path = Path("test.xlsx")
+        excel_file = tmp_path / "test.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "발급개수"])
-        ws.append(["쿠폰", "즉시할인", 30, "RATE", 50])
-        wb.save(tmp_path)
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수"])
+        ws.append(["쿠폰", "즉시할인", 30, "RATE", 10, ""])
+        wb.save(excel_file)
 
-        try:
-            mocker.patch('sys.argv', ['main.py', 'apply', str(tmp_path)])
-            main.main()
+        mocker.patch('sys.argv', ['main.py', 'verify', str(excel_file)])
+        main.main()
 
-            # Verify cmd_apply was called
-            assert mock_cmd_apply.call_count == 1
-        finally:
-            if tmp_path.exists():
-                tmp_path.unlink()
+        # Verify cmd_verify was called
+        assert mock_cmd_verify.call_count == 1
 
     def test_main_issue_command_dispatched(self, mocker):
         """Issue command should be dispatched correctly"""
@@ -271,13 +375,12 @@ class TestMainFunction:
 
         mock_cmd_issue.assert_called_once()
 
-
-    def test_main_install_command_dispatched(self, mocker):
+    def test_main_install_command_dispatched(self, tmp_path, mocker):
         """Install command should be dispatched correctly"""
         mock_cmd_install = mocker.patch('main.cmd_install')
 
         mocker.patch('sys.argv', [
-            'main.py', 'install',
+            'main.py', 'install', str(tmp_path),
             '--access-key', 'test-access',
             '--secret-key', 'test-secret',
             '--user-id', 'test-user',

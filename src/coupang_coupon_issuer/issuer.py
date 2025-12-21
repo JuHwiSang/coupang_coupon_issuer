@@ -10,7 +10,8 @@ from openpyxl import load_workbook
 
 from .coupang_api import CoupangAPIClient
 from .config import (
-    EXCEL_INPUT_FILE,
+    get_base_dir,
+    get_excel_file,
     COUPON_MAX_DISCOUNT,
     COUPON_CONTRACT_ID,
     COUPON_DEFAULT_ISSUE_COUNT,
@@ -22,6 +23,7 @@ class CouponIssuer:
 
     def __init__(
         self,
+        base_dir: Optional[Path] = None,
         access_key: Optional[str] = None,
         secret_key: Optional[str] = None,
         user_id: Optional[str] = None,
@@ -29,11 +31,15 @@ class CouponIssuer:
     ):
         """
         Args:
+            base_dir: 작업 디렉토리 (None이면 현재 디렉토리)
             access_key: Coupang Access Key (None이면 환경변수에서 가져옴)
             secret_key: Coupang Secret Key (None이면 환경변수에서 가져옴)
             user_id: WING 사용자 ID (None이면 환경변수에서 가져옴)
             vendor_id: 판매자 ID (None이면 환경변수에서 가져옴)
         """
+        self.base_dir = get_base_dir(base_dir)
+        self.excel_file = get_excel_file(self.base_dir)
+
         self.access_key = access_key or os.environ.get("COUPANG_ACCESS_KEY")
         self.secret_key = secret_key or os.environ.get("COUPANG_SECRET_KEY")
         self.user_id = user_id or os.environ.get("COUPANG_USER_ID")
@@ -219,7 +225,7 @@ class CouponIssuer:
             FileNotFoundError: 엑셀 파일이 없는 경우
             ValueError: 엑셀 형식이 잘못된 경우
         """
-        excel_path = EXCEL_INPUT_FILE  # 이미 Path 객체 (/etc/coupang_coupon_issuer/coupons.xlsx)
+        excel_path = self.excel_file  # Path 객체
 
         if not excel_path.exists():
             raise FileNotFoundError(f"엑셀 파일이 없습니다: {excel_path}")

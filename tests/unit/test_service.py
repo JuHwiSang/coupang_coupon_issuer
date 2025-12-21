@@ -1,7 +1,7 @@
 """
-Unit tests for service.py - CrontabService
+Unit tests for service.py - CrontabService (UUID-based)
 
-Tests the CrontabService class for cron-based scheduling.
+Tests the CrontabService class for cron-based scheduling with UUID tracking.
 Note: Most tests skip on Windows. Full integration tests are in tests/integration/
 """
 import pytest
@@ -11,31 +11,8 @@ from unittest.mock import MagicMock
 from coupang_coupon_issuer.service import CrontabService
 from coupang_coupon_issuer.config import SERVICE_NAME
 
-# Skip all service tests on Windows (os.geteuid not available)
+# Skip all service tests on Windows (cron not available)
 pytestmark = pytest.mark.skipif(os.name == 'nt', reason="Service tests require Linux")
-
-
-@pytest.mark.unit
-class TestRootPermission:
-    """Test root permission checking"""
-
-    def test_check_root_with_root_access(self, mocker):
-        """Root access should pass without error"""
-        mocker.patch('os.geteuid', return_value=0)
-
-        # Should not raise
-        CrontabService._check_root()
-
-    def test_check_root_without_root_access(self, mocker):
-        """Non-root should raise PermissionError"""
-        mocker.patch('os.geteuid', return_value=1000)
-        mocker.patch('sys.argv', ['main.py', 'install'])
-
-        with pytest.raises(PermissionError) as exc_info:
-            CrontabService._check_root()
-
-        assert "root 권한이 필요합니다" in str(exc_info.value)
-        assert "sudo" in str(exc_info.value)
 
 
 @pytest.mark.unit
@@ -107,7 +84,7 @@ class TestPackageManagerDetection:
 class TestCronInstallation:
     """Test cron installation"""
 
-    def test_install_cron_on_ubuntu(self, mocker):
+    def test_install_cron_on_ubuntu(self, tmp_path, mocker):
         """Should install cron using apt on Ubuntu/Debian"""
         mocker.patch.object(CrontabService, '_get_package_manager', return_value="apt")
         mock_system = mocker.patch('os.system', return_value=0)
@@ -120,7 +97,7 @@ class TestCronInstallation:
         assert any("apt-get update" in str(c) for c in calls)
         assert any("apt-get install" in str(c) and "cron" in str(c) for c in calls)
 
-    def test_install_cron_on_rhel8(self, mocker):
+    def test_install_cron_on_rhel8(self, tmp_path, mocker):
         """Should install cron using dnf on RHEL 8+"""
         mocker.patch.object(CrontabService, '_get_package_manager', return_value="dnf")
         mock_system = mocker.patch('os.system', return_value=0)
@@ -131,7 +108,7 @@ class TestCronInstallation:
         assert "dnf install" in str(mock_system.call_args)
         assert "cronie" in str(mock_system.call_args)
 
-    def test_install_cron_on_unsupported_system(self, mocker):
+    def test_install_cron_on_unsupported_system(self, tmp_path, mocker):
         """Should raise RuntimeError on unsupported systems"""
         mocker.patch.object(CrontabService, '_get_package_manager', return_value=None)
 
@@ -140,7 +117,7 @@ class TestCronInstallation:
 
         assert "지원하지 않는 배포판" in str(exc_info.value)
 
-    def test_install_cron_failure(self, mocker):
+    def test_install_cron_failure(self, tmp_path, mocker):
         """Should raise RuntimeError when installation fails"""
         mocker.patch.object(CrontabService, '_get_package_manager', return_value="apt")
         mocker.patch('os.system', return_value=1)  # Non-zero exit code
@@ -190,7 +167,7 @@ class TestCronServiceEnable:
 
 @pytest.mark.unit
 class TestCrontabOperations:
-    """Test crontab read/write operations"""
+    """Test crontab read/write operations (UUID-based)"""
 
     def test_get_current_crontab_with_existing_crontab(self, mocker):
         """Should read existing crontab"""
@@ -214,34 +191,18 @@ class TestCrontabOperations:
         assert result == ""
 
     def test_add_cron_job_to_empty_crontab(self, mocker):
-        """Should add job to empty crontab"""
+        """Should add job with UUID marker to empty crontab"""
         mocker.patch.object(CrontabService, '_get_current_crontab', return_value="")
         mock_run = mocker.patch('subprocess.run')
         mock_run.return_value = MagicMock(returncode=0)
 
-        job_line = f"0 0 * * * /path/to/command  {CrontabService.CRON_MARKER}"
+        job_line = "0 0 * * * /path/to/command  # coupang_coupon_issuer_job:test-uuid-1234"
         CrontabService._add_cron_job(job_line)
 
         # Verify crontab was updated
         mock_run.assert_called_once()
         assert mock_run.call_args[0][0] == ["crontab", "-"]
         assert job_line in mock_run.call_args[1]['input']
-
-    def test_add_cron_job_updates_existing_job(self, mocker):
-        """Should update existing job with same marker"""
-        existing_crontab = f"0 0 * * * /old/command  {CrontabService.CRON_MARKER}\n"
-        mocker.patch.object(CrontabService, '_get_current_crontab', return_value=existing_crontab)
-        mock_run = mocker.patch('subprocess.run')
-        mock_run.return_value = MagicMock(returncode=0)
-
-        new_job = f"0 0 * * * /new/command  {CrontabService.CRON_MARKER}"
-        CrontabService._add_cron_job(new_job)
-
-        # Verify old job was removed and new one added
-        mock_run.assert_called_once()
-        new_crontab = mock_run.call_args[1]['input']
-        assert "/old/command" not in new_crontab
-        assert new_job in new_crontab
 
     def test_add_cron_job_preserves_other_jobs(self, mocker):
         """Should preserve other cron jobs"""
@@ -250,7 +211,7 @@ class TestCrontabOperations:
         mock_run = mocker.patch('subprocess.run')
         mock_run.return_value = MagicMock(returncode=0)
 
-        new_job = f"0 0 * * * /my/command  {CrontabService.CRON_MARKER}"
+        new_job = "0 0 * * * /my/command  # coupang_coupon_issuer_job:new-uuid"
         CrontabService._add_cron_job(new_job)
 
         # Verify other job was preserved
@@ -269,84 +230,172 @@ class TestCrontabOperations:
 
         assert "Crontab 업데이트 실패" in str(exc_info.value)
 
-    def test_remove_cron_job_when_exists(self, mocker):
-        """Should remove job when it exists"""
-        existing_crontab = f"0 0 * * * /command  {CrontabService.CRON_MARKER}\n"
+    def test_remove_crontab_by_uuid_when_exists(self, mocker):
+        """Should remove job matching UUID"""
+        existing_crontab = (
+            "0 0 * * * /other/command\n"
+            "0 0 * * * /my/command  # coupang_coupon_issuer_job:test-uuid-1234\n"
+        )
         mocker.patch.object(CrontabService, '_get_current_crontab', return_value=existing_crontab)
         mock_run = mocker.patch('subprocess.run')
         mock_run.return_value = MagicMock(returncode=0)
 
-        CrontabService._remove_cron_job()
+        CrontabService._remove_crontab_by_uuid("test-uuid-1234")
 
-        # Verify job was removed
+        # Verify job with UUID was removed, other preserved
         mock_run.assert_called_once()
         new_crontab = mock_run.call_args[1]['input']
-        assert CrontabService.CRON_MARKER not in new_crontab
+        assert "coupang_coupon_issuer_job:test-uuid-1234" not in new_crontab
+        assert "/other/command" in new_crontab
 
-    def test_remove_cron_job_when_not_exists(self, mocker):
-        """Should do nothing when job doesn't exist"""
-        mocker.patch.object(CrontabService, '_get_current_crontab', return_value="")
+    def test_remove_crontab_by_uuid_when_not_exists(self, mocker, capsys):
+        """Should print message when UUID not found"""
+        mocker.patch.object(CrontabService, '_get_current_crontab', return_value="0 0 * * * /other/command\n")
+        mock_run = mocker.patch('subprocess.run')
 
-        CrontabService._remove_cron_job()
+        CrontabService._remove_crontab_by_uuid("nonexistent-uuid")
 
-        # Should just print message and return
+        # Should not call crontab update
+        mock_run.assert_not_called()
+
+        # Should print message
+        captured = capsys.readouterr()
+        assert "제거할 cron job이 없습니다" in captured.out
 
 
 @pytest.mark.unit
 class TestInstall:
-    """Test install() method"""
+    """Test install() method with UUID-based cron management"""
 
-    def test_install_saves_credentials(self, mocker):
-        """Verify credentials are saved"""
+    def test_install_saves_config_with_new_uuid(self, tmp_path, mocker, capsys):
+        """Install should save config with new UUID"""
         # Mock all dependencies
-        mocker.patch('os.geteuid', return_value=0)
         mocker.patch.object(CrontabService, '_detect_cron_system', return_value="cron")
         mocker.patch.object(CrontabService, '_enable_cron_service')
         mocker.patch.object(CrontabService, '_add_cron_job')
-        mocker.patch('shutil.copy2')
-        mocker.patch('shutil.copytree')
-        mocker.patch('pathlib.Path.mkdir')
-        mocker.patch('pathlib.Path.chmod')
-        mocker.patch('pathlib.Path.touch')
-        mocker.patch('pathlib.Path.symlink_to')
-        mocker.patch('pathlib.Path.unlink')
-        mocker.patch('pathlib.Path.exists', return_value=False)
-        mocker.patch('pathlib.Path.is_symlink', return_value=False)
-        mocker.patch('os.system', return_value=0)
+        mocker.patch('sys.executable', '/fake/path/coupang_coupon_issuer')
 
-        mock_save_creds = mocker.patch('coupang_coupon_issuer.service.CredentialManager.save_credentials')
+        # Mock ConfigManager
+        mocker.patch('coupang_coupon_issuer.service.ConfigManager.get_installation_id', return_value=None)
+        mock_save = mocker.patch('coupang_coupon_issuer.service.ConfigManager.save_config', return_value="new-uuid-1234")
 
         # Run install
-        CrontabService.install("access-key", "secret-key", "user-id", "vendor-id")
+        CrontabService.install(tmp_path, "access-key", "secret-key", "user-id", "vendor-id")
 
-        # Verify credentials were saved
-        mock_save_creds.assert_called_once_with("access-key", "secret-key", "user-id", "vendor-id")
+        # Verify config was saved
+        mock_save.assert_called_once_with("access-key", "secret-key", "user-id", "vendor-id")
+
+    def test_install_removes_old_cron_job_when_uuid_exists(self, tmp_path, mocker):
+        """Install should remove old cron job if UUID exists"""
+        # Mock dependencies
+        mocker.patch.object(CrontabService, '_detect_cron_system', return_value="cron")
+        mocker.patch.object(CrontabService, '_enable_cron_service')
+        mocker.patch.object(CrontabService, '_add_cron_job')
+        mocker.patch('sys.executable', '/fake/path/coupang_coupon_issuer')
+
+        # Mock existing UUID
+        mocker.patch('coupang_coupon_issuer.service.ConfigManager.get_installation_id', return_value="old-uuid-5678")
+        mock_remove = mocker.patch.object(CrontabService, '_remove_crontab_by_uuid')
+        mocker.patch('coupang_coupon_issuer.service.ConfigManager.save_config', return_value="new-uuid-1234")
+
+        # Run install
+        CrontabService.install(tmp_path, "access-key", "secret-key", "user-id", "vendor-id")
+
+        # Verify old cron job was removed
+        mock_remove.assert_called_once_with("old-uuid-5678")
+
+    def test_install_creates_cron_job_with_uuid_marker(self, tmp_path, mocker):
+        """Install should create cron job with UUID in comment"""
+        # Mock dependencies
+        mocker.patch.object(CrontabService, '_detect_cron_system', return_value="cron")
+        mocker.patch.object(CrontabService, '_enable_cron_service')
+        mocker.patch('sys.executable', '/fake/bin/coupang_coupon_issuer')
+        mocker.patch('coupang_coupon_issuer.service.ConfigManager.get_installation_id', return_value=None)
+        mocker.patch('coupang_coupon_issuer.service.ConfigManager.save_config', return_value="test-uuid-9999")
+
+        # Mock add_cron_job
+        mock_add = mocker.patch.object(CrontabService, '_add_cron_job')
+
+        # Run install
+        CrontabService.install(tmp_path, "access-key", "secret-key", "user-id", "vendor-id")
+
+        # Verify cron job was added with UUID marker
+        mock_add.assert_called_once()
+        job_line = mock_add.call_args[0][0]
+        assert "# coupang_coupon_issuer_job:test-uuid-9999" in job_line
+        assert "/fake/bin/coupang_coupon_issuer issue" in job_line
+
+    def test_install_with_jitter_adds_jitter_flag(self, tmp_path, mocker):
+        """Install with jitter should add --jitter-max flag to cron job"""
+        # Mock dependencies
+        mocker.patch.object(CrontabService, '_detect_cron_system', return_value="cron")
+        mocker.patch.object(CrontabService, '_enable_cron_service')
+        mocker.patch('sys.executable', '/fake/bin/coupang_coupon_issuer')
+        mocker.patch('coupang_coupon_issuer.service.ConfigManager.get_installation_id', return_value=None)
+        mocker.patch('coupang_coupon_issuer.service.ConfigManager.save_config', return_value="test-uuid")
+
+        mock_add = mocker.patch.object(CrontabService, '_add_cron_job')
+
+        # Run install with jitter
+        CrontabService.install(tmp_path, "access-key", "secret-key", "user-id", "vendor-id", jitter_max=60)
+
+        # Verify jitter flag in cron job
+        job_line = mock_add.call_args[0][0]
+        assert "--jitter-max 60" in job_line
+
+    def test_install_installs_cron_when_not_detected(self, tmp_path, mocker):
+        """Install should install cron if not detected"""
+        # Mock cron not detected
+        mocker.patch.object(CrontabService, '_detect_cron_system', return_value=None)
+        mock_install_cron = mocker.patch.object(CrontabService, '_install_cron')
+        mocker.patch.object(CrontabService, '_enable_cron_service')
+        mocker.patch.object(CrontabService, '_add_cron_job')
+        mocker.patch('sys.executable', '/fake/path/coupang_coupon_issuer')
+        mocker.patch('coupang_coupon_issuer.service.ConfigManager.get_installation_id', return_value=None)
+        mocker.patch('coupang_coupon_issuer.service.ConfigManager.save_config', return_value="test-uuid")
+
+        # Run install
+        CrontabService.install(tmp_path, "access-key", "secret-key", "user-id", "vendor-id")
+
+        # Verify cron was installed
+        mock_install_cron.assert_called_once()
 
 
 @pytest.mark.unit
 class TestUninstall:
-    """Test uninstall() method"""
+    """Test uninstall() method with UUID-based removal"""
 
-    def test_uninstall_removes_cron_job(self, mocker):
-        """Verify cron job is removed"""
-        mocker.patch('os.geteuid', return_value=0)
-        mock_remove_job = mocker.patch.object(CrontabService, '_remove_cron_job')
-        mocker.patch('pathlib.Path.exists', return_value=False)
-        mocker.patch('pathlib.Path.is_symlink', return_value=False)
+    def test_uninstall_removes_cron_job_by_uuid(self, tmp_path, mocker):
+        """Uninstall should remove cron job using UUID from config"""
+        # Mock UUID exists
+        mocker.patch('coupang_coupon_issuer.service.ConfigManager.get_installation_id', return_value="my-uuid-1234")
+        mock_remove = mocker.patch.object(CrontabService, '_remove_crontab_by_uuid')
 
-        CrontabService.uninstall()
+        CrontabService.uninstall(tmp_path)
 
-        # Verify cron job removal was called
-        mock_remove_job.assert_called_once()
+        # Verify cron job removal with correct UUID
+        mock_remove.assert_called_once_with("my-uuid-1234")
+
+    def test_uninstall_warns_when_no_uuid(self, tmp_path, mocker, capsys):
+        """Uninstall should warn if no UUID found in config"""
+        # Mock no UUID
+        mocker.patch('coupang_coupon_issuer.service.ConfigManager.get_installation_id', return_value=None)
+        mock_remove = mocker.patch.object(CrontabService, '_remove_crontab_by_uuid')
+
+        CrontabService.uninstall(tmp_path)
+
+        # Should not call remove
+        mock_remove.assert_not_called()
+
+        # Should print warning
+        captured = capsys.readouterr()
+        assert "WARNING" in captured.out
+        assert "installation_id가 없습니다" in captured.out
 
 
 @pytest.mark.unit
 class TestServiceConfiguration:
     """Test service configuration constants"""
-
-    def test_cron_marker_constant(self):
-        """Verify CRON_MARKER constant"""
-        assert CrontabService.CRON_MARKER == "# coupang_coupon_issuer_job"
 
     def test_service_name_constant(self):
         """Verify SERVICE_NAME constant"""

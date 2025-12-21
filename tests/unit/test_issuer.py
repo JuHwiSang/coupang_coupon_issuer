@@ -10,7 +10,6 @@ from openpyxl import Workbook
 
 from coupang_coupon_issuer.issuer import CouponIssuer
 from coupang_coupon_issuer.config import (
-    EXCEL_INPUT_FILE,
     COUPON_MAX_DISCOUNT,
     COUPON_CONTRACT_ID,
     COUPON_DEFAULT_ISSUE_COUNT
@@ -21,9 +20,10 @@ from coupang_coupon_issuer.config import (
 class TestCouponIssuerInit:
     """Test CouponIssuer initialization"""
 
-    def test_init_with_explicit_credentials(self):
+    def test_init_with_explicit_credentials(self, tmp_path):
         """Initialize with explicit credential parameters"""
         issuer = CouponIssuer(
+            base_dir=tmp_path,
             access_key="test-access",
             secret_key="test-secret",
             user_id="test-user",
@@ -34,25 +34,27 @@ class TestCouponIssuerInit:
         assert issuer.secret_key == "test-secret"
         assert issuer.user_id == "test-user"
         assert issuer.vendor_id == "test-vendor"
+        assert issuer.base_dir == tmp_path
 
-    def test_init_from_env_variables(self, monkeypatch):
+    def test_init_from_env_variables(self, tmp_path, monkeypatch):
         """Fallback to environment variables when args not provided"""
         monkeypatch.setenv("COUPANG_ACCESS_KEY", "env-access")
         monkeypatch.setenv("COUPANG_SECRET_KEY", "env-secret")
         monkeypatch.setenv("COUPANG_USER_ID", "env-user")
         monkeypatch.setenv("COUPANG_VENDOR_ID", "env-vendor")
 
-        issuer = CouponIssuer()
+        issuer = CouponIssuer(base_dir=tmp_path)
 
         assert issuer.access_key == "env-access"
         assert issuer.secret_key == "env-secret"
         assert issuer.user_id == "env-user"
         assert issuer.vendor_id == "env-vendor"
 
-    def test_init_missing_api_keys(self):
+    def test_init_missing_api_keys(self, tmp_path):
         """Raise ValueError when API keys missing"""
         with pytest.raises(ValueError) as exc_info:
             CouponIssuer(
+                base_dir=tmp_path,
                 access_key=None,
                 secret_key=None,
                 user_id="user",
@@ -61,10 +63,11 @@ class TestCouponIssuerInit:
 
         assert "API 키가 설정되지 않았습니다" in str(exc_info.value)
 
-    def test_init_missing_coupon_info(self):
+    def test_init_missing_coupon_info(self, tmp_path):
         """Raise ValueError when user_id or vendor_id missing"""
         with pytest.raises(ValueError) as exc_info:
             CouponIssuer(
+                base_dir=tmp_path,
                 access_key="access",
                 secret_key="secret",
                 user_id=None,
@@ -80,7 +83,7 @@ class TestExcelParsing:
 
     def test_fetch_coupons_valid_file(self, tmp_path):
         """Read valid Excel file with 6 columns"""
-        excel_file = tmp_path / "valid.xlsx"
+        excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
@@ -90,34 +93,34 @@ class TestExcelParsing:
         wb.save(excel_file)
 
         issuer = CouponIssuer(
+            base_dir=tmp_path,
             access_key="test-access",
             secret_key="test-secret",
             user_id="test-user",
             vendor_id="test-vendor"
         )
 
-        with patch('coupang_coupon_issuer.issuer.EXCEL_INPUT_FILE', excel_file):
-            coupons = issuer._fetch_coupons_from_excel()
+        coupons = issuer._fetch_coupons_from_excel()
 
-            assert len(coupons) == 2
+        assert len(coupons) == 2
 
-            assert coupons[0]['name'] == "테스트쿠폰1"
-            assert coupons[0]['type'] == "즉시할인"
-            assert coupons[0]['validity_days'] == 30
-            assert coupons[0]['discount_type'] == "RATE"
-            assert coupons[0]['discount'] == 10  # Column E
-            assert coupons[0]['issue_count'] is None  # 즉시할인: None
+        assert coupons[0]['name'] == "테스트쿠폰1"
+        assert coupons[0]['type'] == "즉시할인"
+        assert coupons[0]['validity_days'] == 30
+        assert coupons[0]['discount_type'] == "RATE"
+        assert coupons[0]['discount'] == 10  # Column E
+        assert coupons[0]['issue_count'] is None  # 즉시할인: None
 
-            assert coupons[1]['name'] == "테스트쿠폰2"
-            assert coupons[1]['type'] == "다운로드쿠폰"
-            assert coupons[1]['validity_days'] == 15
-            assert coupons[1]['discount_type'] == "PRICE"
-            assert coupons[1]['discount'] == 500  # Column E
-            assert coupons[1]['issue_count'] == 100  # Column F
+        assert coupons[1]['name'] == "테스트쿠폰2"
+        assert coupons[1]['type'] == "다운로드쿠폰"
+        assert coupons[1]['validity_days'] == 15
+        assert coupons[1]['discount_type'] == "PRICE"
+        assert coupons[1]['discount'] == 500  # Column E
+        assert coupons[1]['issue_count'] == 100  # Column F
 
     def test_fetch_coupons_missing_columns(self, tmp_path):
         """Raise ValueError when required columns missing"""
-        excel_file = tmp_path / "invalid_columns.xlsx"
+        excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
@@ -126,21 +129,21 @@ class TestExcelParsing:
         wb.save(excel_file)
 
         issuer = CouponIssuer(
+            base_dir=tmp_path,
             access_key="test-access",
             secret_key="test-secret",
             user_id="test-user",
             vendor_id="test-vendor"
         )
 
-        with patch('coupang_coupon_issuer.issuer.EXCEL_INPUT_FILE', excel_file):
-            with pytest.raises(ValueError) as exc_info:
-                issuer._fetch_coupons_from_excel()
+        with pytest.raises(ValueError) as exc_info:
+            issuer._fetch_coupons_from_excel()
 
-            assert "필수 컬럼이 없습니다" in str(exc_info.value)
+        assert "필수 컬럼이 없습니다" in str(exc_info.value)
 
     def test_fetch_coupons_empty_rows_skipped(self, tmp_path):
         """Verify empty rows are skipped"""
-        excel_file = tmp_path / "with_empty_rows.xlsx"
+        excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
@@ -151,34 +154,34 @@ class TestExcelParsing:
         wb.save(excel_file)
 
         issuer = CouponIssuer(
+            base_dir=tmp_path,
             access_key="test-access",
             secret_key="test-secret",
             user_id="test-user",
             vendor_id="test-vendor"
         )
 
-        with patch('coupang_coupon_issuer.issuer.EXCEL_INPUT_FILE', excel_file):
-            coupons = issuer._fetch_coupons_from_excel()
+        coupons = issuer._fetch_coupons_from_excel()
 
-            # Only 2 coupons, empty row skipped
-            assert len(coupons) == 2
+        # Only 2 coupons, empty row skipped
+        assert len(coupons) == 2
 
     def test_fetch_coupons_file_not_found(self, tmp_path):
         """Raise FileNotFoundError when Excel file doesn't exist"""
         nonexistent_file = tmp_path / "nonexistent.xlsx"
 
         issuer = CouponIssuer(
+            base_dir=tmp_path,
             access_key="test-access",
             secret_key="test-secret",
             user_id="test-user",
             vendor_id="test-vendor"
         )
 
-        with patch('coupang_coupon_issuer.issuer.EXCEL_INPUT_FILE', nonexistent_file):
-            with pytest.raises(FileNotFoundError) as exc_info:
-                issuer._fetch_coupons_from_excel()
+        with pytest.raises(FileNotFoundError) as exc_info:
+            issuer._fetch_coupons_from_excel()
 
-            assert "엑셀 파일이 없습니다" in str(exc_info.value)
+        assert "엑셀 파일이 없습니다" in str(exc_info.value)
 
 
 @pytest.mark.unit
@@ -187,7 +190,7 @@ class TestInputNormalization:
 
     def test_normalize_coupon_name_strip(self, tmp_path):
         """Coupon name should be stripped of whitespace"""
-        excel_file = tmp_path / "name_strip.xlsx"
+        excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
@@ -195,16 +198,15 @@ class TestInputNormalization:
         ws.append(["  테스트쿠폰  ", "즉시할인", 30, "RATE", 50, ""])
         wb.save(excel_file)
 
-        issuer = CouponIssuer("a", "s", "u", "v")
+        issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
 
-        with patch('coupang_coupon_issuer.issuer.EXCEL_INPUT_FILE', excel_file):
-            coupons = issuer._fetch_coupons_from_excel()
+        coupons = issuer._fetch_coupons_from_excel()
 
-            assert coupons[0]['name'] == "테스트쿠폰"  # Stripped
+        assert coupons[0]['name'] == "테스트쿠폰"  # Stripped
 
     def test_normalize_coupon_type_whitespace_removal(self, tmp_path):
         """Coupon type whitespace should be removed"""
-        excel_file = tmp_path / "type_normalize.xlsx"
+        excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
@@ -213,17 +215,16 @@ class TestInputNormalization:
         ws.append(["쿠폰2", "다운로 드쿠폰", 15, "PRICE", 1000, 100])
         wb.save(excel_file)
 
-        issuer = CouponIssuer("a", "s", "u", "v")
+        issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
 
-        with patch('coupang_coupon_issuer.issuer.EXCEL_INPUT_FILE', excel_file):
-            coupons = issuer._fetch_coupons_from_excel()
+        coupons = issuer._fetch_coupons_from_excel()
 
-            assert coupons[0]['type'] == "즉시할인"
-            assert coupons[1]['type'] == "다운로드쿠폰"
+        assert coupons[0]['type'] == "즉시할인"
+        assert coupons[1]['type'] == "다운로드쿠폰"
 
     def test_normalize_validity_period_extract_numbers(self, tmp_path):
         """Extract numbers from validity period strings"""
-        excel_file = tmp_path / "validity_normalize.xlsx"
+        excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
@@ -232,17 +233,16 @@ class TestInputNormalization:
         ws.append(["쿠폰2", "다운로드쿠폰", "15 days", "PRICE", 1000, 100])
         wb.save(excel_file)
 
-        issuer = CouponIssuer("a", "s", "u", "v")
+        issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
 
-        with patch('coupang_coupon_issuer.issuer.EXCEL_INPUT_FILE', excel_file):
-            coupons = issuer._fetch_coupons_from_excel()
+        coupons = issuer._fetch_coupons_from_excel()
 
-            assert coupons[0]['validity_days'] == 30
-            assert coupons[1]['validity_days'] == 15
+        assert coupons[0]['validity_days'] == 30
+        assert coupons[1]['validity_days'] == 15
 
     def test_normalize_discount_method_uppercase(self, tmp_path):
         """Discount method should be normalized to uppercase"""
-        excel_file = tmp_path / "discount_normalize.xlsx"
+        excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
@@ -252,18 +252,17 @@ class TestInputNormalization:
         ws.append(["쿠폰3", "즉시할인", 7, "price", 100, ""])
         wb.save(excel_file)
 
-        issuer = CouponIssuer("a", "s", "u", "v")
+        issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
 
-        with patch('coupang_coupon_issuer.issuer.EXCEL_INPUT_FILE', excel_file):
-            coupons = issuer._fetch_coupons_from_excel()
+        coupons = issuer._fetch_coupons_from_excel()
 
-            assert coupons[0]['discount_type'] == "RATE"
-            assert coupons[1]['discount_type'] == "FIXED_WITH_QUANTITY"
-            assert coupons[2]['discount_type'] == "PRICE"
+        assert coupons[0]['discount_type'] == "RATE"
+        assert coupons[1]['discount_type'] == "FIXED_WITH_QUANTITY"
+        assert coupons[2]['discount_type'] == "PRICE"
 
     def test_normalize_quantity_extract_numbers(self, tmp_path):
         """Extract numbers from discount and issue count strings"""
-        excel_file = tmp_path / "quantity_normalize.xlsx"
+        excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
@@ -272,18 +271,17 @@ class TestInputNormalization:
         ws.append(["쿠폰2", "다운로드쿠폰", 15, "PRICE", "500 원", "100개"])
         wb.save(excel_file)
 
-        issuer = CouponIssuer("a", "s", "u", "v")
+        issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
 
-        with patch('coupang_coupon_issuer.issuer.EXCEL_INPUT_FILE', excel_file):
-            coupons = issuer._fetch_coupons_from_excel()
+        coupons = issuer._fetch_coupons_from_excel()
 
-            # Column E: 할인금액/비율
-            assert coupons[0]['discount'] == 10  # "10%" → 10
-            assert coupons[1]['discount'] == 500  # "500 원" → 500
+        # Column E: 할인금액/비율
+        assert coupons[0]['discount'] == 10  # "10%" → 10
+        assert coupons[1]['discount'] == 500  # "500 원" → 500
 
-            # Column F: 발급개수
-            assert coupons[0]['issue_count'] is None  # 즉시할인: None
-            assert coupons[1]['issue_count'] == 100  # "100개" → 100
+        # Column F: 발급개수
+        assert coupons[0]['issue_count'] is None  # 즉시할인: None
+        assert coupons[1]['issue_count'] == 100  # "100개" → 100
 
 
 @pytest.mark.unit
@@ -293,7 +291,7 @@ class TestValidation:
     def test_validate_rate_range_1_to_99(self, tmp_path):
         """RATE discount must be between 1-99"""
         # Valid cases
-        excel_file = tmp_path / "valid_rates.xlsx"
+        excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
@@ -303,45 +301,42 @@ class TestValidation:
         ws.append(["쿠폰3", "즉시할인", 30, "RATE", 99, ""])
         wb.save(excel_file)
 
-        issuer = CouponIssuer("a", "s", "u", "v")
+        issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
 
-        with patch('coupang_coupon_issuer.issuer.EXCEL_INPUT_FILE', excel_file):
-            coupons = issuer._fetch_coupons_from_excel()
-            assert len(coupons) == 3  # All valid
+        coupons = issuer._fetch_coupons_from_excel()
+        assert len(coupons) == 3  # All valid
 
         # Invalid: 0%
-        excel_file_invalid = tmp_path / "invalid_rate_0.xlsx"
+        excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
         ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수"])
         ws.append(["쿠폰1", "즉시할인", 30, "RATE", 0, ""])
-        wb.save(excel_file_invalid)
+        wb.save(excel_file)
 
-        with patch('coupang_coupon_issuer.issuer.EXCEL_INPUT_FILE', excel_file_invalid):
-            with pytest.raises(ValueError) as exc_info:
-                issuer._fetch_coupons_from_excel()
-            # 0 value triggers the general "> 0" validation before RATE-specific validation
-            assert "할인금액/비율은 0보다 커야 합니다" in str(exc_info.value)
+        with pytest.raises(ValueError) as exc_info:
+            issuer._fetch_coupons_from_excel()
+        # 0 value triggers the general "> 0" validation before RATE-specific validation
+        assert "할인금액/비율은 0보다 커야 합니다" in str(exc_info.value)
 
         # Invalid: 100%
-        excel_file_invalid2 = tmp_path / "invalid_rate_100.xlsx"
+        excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
         ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수"])
         ws.append(["쿠폰1", "즉시할인", 30, "RATE", 100, ""])
-        wb.save(excel_file_invalid2)
+        wb.save(excel_file)
 
-        with patch('coupang_coupon_issuer.issuer.EXCEL_INPUT_FILE', excel_file_invalid2):
-            with pytest.raises(ValueError) as exc_info:
-                issuer._fetch_coupons_from_excel()
-            assert "RATE 할인율은 1~99 사이여야 합니다" in str(exc_info.value)
+        with pytest.raises(ValueError) as exc_info:
+            issuer._fetch_coupons_from_excel()
+        assert "RATE 할인율은 1~99 사이여야 합니다" in str(exc_info.value)
 
     def test_validate_price_minimum_10_won(self, tmp_path):
         """PRICE discount must be >= 10 won"""
         # Valid
-        excel_file = tmp_path / "valid_price.xlsx"
+        excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
@@ -350,30 +345,28 @@ class TestValidation:
         ws.append(["쿠폰2", "즉시할인", 30, "PRICE", 100, ""])
         wb.save(excel_file)
 
-        issuer = CouponIssuer("a", "s", "u", "v")
+        issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
 
-        with patch('coupang_coupon_issuer.issuer.EXCEL_INPUT_FILE', excel_file):
-            coupons = issuer._fetch_coupons_from_excel()
-            assert len(coupons) == 2
+        coupons = issuer._fetch_coupons_from_excel()
+        assert len(coupons) == 2
 
         # Invalid: < 10
-        excel_file_invalid = tmp_path / "invalid_price_min.xlsx"
+        excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
         ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수"])
         ws.append(["쿠폰1", "즉시할인", 30, "PRICE", 5, ""])
-        wb.save(excel_file_invalid)
+        wb.save(excel_file)
 
-        with patch('coupang_coupon_issuer.issuer.EXCEL_INPUT_FILE', excel_file_invalid):
-            with pytest.raises(ValueError) as exc_info:
-                issuer._fetch_coupons_from_excel()
-            assert "PRICE 할인금액은 최소 10원 이상이어야 합니다" in str(exc_info.value)
+        with pytest.raises(ValueError) as exc_info:
+            issuer._fetch_coupons_from_excel()
+        assert "PRICE 할인금액은 최소 10원 이상이어야 합니다" in str(exc_info.value)
 
     def test_validate_price_10_won_units(self, tmp_path):
         """PRICE discount must be in 10-won units"""
         # Valid
-        excel_file = tmp_path / "valid_price_units.xlsx"
+        excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
@@ -383,25 +376,23 @@ class TestValidation:
         ws.append(["쿠폰3", "즉시할인", 30, "PRICE", 100, ""])
         wb.save(excel_file)
 
-        issuer = CouponIssuer("a", "s", "u", "v")
+        issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
 
-        with patch('coupang_coupon_issuer.issuer.EXCEL_INPUT_FILE', excel_file):
-            coupons = issuer._fetch_coupons_from_excel()
-            assert len(coupons) == 3
+        coupons = issuer._fetch_coupons_from_excel()
+        assert len(coupons) == 3
 
         # Invalid: not 10-won unit
-        excel_file_invalid = tmp_path / "invalid_price_units.xlsx"
+        excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
         ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수"])
         ws.append(["쿠폰1", "즉시할인", 30, "PRICE", 15, ""])
-        wb.save(excel_file_invalid)
+        wb.save(excel_file)
 
-        with patch('coupang_coupon_issuer.issuer.EXCEL_INPUT_FILE', excel_file_invalid):
-            with pytest.raises(ValueError) as exc_info:
-                issuer._fetch_coupons_from_excel()
-            assert "PRICE 할인금액은 10원 단위여야 합니다" in str(exc_info.value)
+        with pytest.raises(ValueError) as exc_info:
+            issuer._fetch_coupons_from_excel()
+        assert "PRICE 할인금액은 10원 단위여야 합니다" in str(exc_info.value)
 
 
 @pytest.mark.unit
@@ -410,7 +401,7 @@ class TestIssuanceWorkflow:
 
     def test_issue_single_coupon_instant_discount(self, tmp_path, requests_mock):
         """Test instant discount coupon creation"""
-        excel_file = tmp_path / "instant.xlsx"
+        excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
@@ -425,10 +416,9 @@ class TestIssuanceWorkflow:
             json={"code": 200, "data": {"requestedId": "instant-123"}}
         )
 
-        issuer = CouponIssuer("a", "s", "u", "test-vendor")
+        issuer = CouponIssuer(tmp_path, "a", "s", "u", "test-vendor")
 
-        with patch('coupang_coupon_issuer.issuer.EXCEL_INPUT_FILE', excel_file):
-            issuer.issue()
+        issuer.issue()
 
         # Verify API was called
         assert requests_mock.call_count == 1
@@ -443,7 +433,7 @@ class TestIssuanceWorkflow:
 
     def test_issue_single_coupon_download_coupon(self, tmp_path, requests_mock):
         """Test download coupon creation"""
-        excel_file = tmp_path / "download.xlsx"
+        excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
@@ -458,10 +448,9 @@ class TestIssuanceWorkflow:
             json={"code": 200, "data": {"couponId": "download-456"}}
         )
 
-        issuer = CouponIssuer("a", "s", "test-user", "v")
+        issuer = CouponIssuer(tmp_path, "a", "s", "test-user", "v")
 
-        with patch('coupang_coupon_issuer.issuer.EXCEL_INPUT_FILE', excel_file):
-            issuer.issue()
+        issuer.issue()
 
         # Verify API was called
         assert requests_mock.call_count == 1
@@ -477,7 +466,7 @@ class TestIssuanceWorkflow:
 
     def test_issue_handles_api_failure(self, tmp_path, requests_mock, capsys):
         """Test error handling when API call fails"""
-        excel_file = tmp_path / "fail.xlsx"
+        excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
@@ -492,10 +481,9 @@ class TestIssuanceWorkflow:
             json={"code": 500, "errorMessage": "Internal error"}
         )
 
-        issuer = CouponIssuer("a", "s", "u", "test-vendor")
+        issuer = CouponIssuer(tmp_path, "a", "s", "u", "test-vendor")
 
-        with patch('coupang_coupon_issuer.issuer.EXCEL_INPUT_FILE', excel_file):
-            issuer.issue()
+        issuer.issue()
 
         # Verify log contains [FAIL] marker
         captured = capsys.readouterr()
@@ -504,7 +492,7 @@ class TestIssuanceWorkflow:
 
     def test_issue_mixed_success_failure(self, tmp_path, requests_mock, capsys):
         """Test mixed success and failure scenario"""
-        excel_file = tmp_path / "mixed.xlsx"
+        excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
@@ -527,10 +515,9 @@ class TestIssuanceWorkflow:
             json=custom_matcher
         )
 
-        issuer = CouponIssuer("a", "s", "u", "test-vendor")
+        issuer = CouponIssuer(tmp_path, "a", "s", "u", "test-vendor")
 
-        with patch('coupang_coupon_issuer.issuer.EXCEL_INPUT_FILE', excel_file):
-            issuer.issue()
+        issuer.issue()
 
         # Verify summary log
         captured = capsys.readouterr()
@@ -560,20 +547,20 @@ class TestIssuerEdgeCases:
 
     @pytest.fixture
     def empty_excel(self, tmp_path):
-        """Excel with headers only, no data rows"""
-        excel_file = tmp_path / "empty.xlsx"
+        """Excel with headers only, no data rows - returns tmp_path"""
+        excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
         ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수"])
         # No data rows
         wb.save(excel_file)
-        return excel_file
+        return tmp_path  # Return tmp_path so CouponIssuer can use it as base_dir
 
     @pytest.fixture
     def malformed_excel(self, tmp_path):
         """Excel with intentionally bad data"""
-        excel_file = tmp_path / "malformed.xlsx"
+        excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
@@ -606,22 +593,21 @@ class TestIssuerEdgeCases:
         Covers: issuer.py lines 76-77
         Expected: "발급할 쿠폰이 없습니다" 출력, 조기 리턴
         """
-        issuer = CouponIssuer("a", "s", "u", "v")
+        issuer = CouponIssuer(empty_excel, "a", "s", "u", "v")
 
-        with patch('coupang_coupon_issuer.issuer.EXCEL_INPUT_FILE', empty_excel):
-            issuer.issue()
+        issuer.issue()
 
         captured = capsys.readouterr()
         assert "발급할 쿠폰이 없습니다" in captured.out
 
-    def test_issue_propagates_excel_read_exception(self):
+    def test_issue_propagates_excel_read_exception(self, tmp_path):
         """
         Test issue() propagates exception from _fetch_coupons_from_excel().
 
         Covers: issuer.py lines 97-99
         Expected: 에러 로그 후 예외 재발생
         """
-        issuer = CouponIssuer("a", "s", "u", "v")
+        issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
 
         # Mock _fetch_coupons_from_excel to raise exception
         with patch.object(issuer, '_fetch_coupons_from_excel', side_effect=RuntimeError("Excel error")):
@@ -637,7 +623,7 @@ class TestIssuerEdgeCases:
         Covers: issuer.py lines 196-199
         Expected: 예외를 잡아서 로그 출력, 쿠폰 발급은 계속 진행
         """
-        excel_file = tmp_path / "test.xlsx"
+        excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
@@ -651,24 +637,23 @@ class TestIssuerEdgeCases:
             exc=Exception("Connection timeout")
         )
 
-        issuer = CouponIssuer("a", "s", "u", "v")
+        issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
 
-        with patch('coupang_coupon_issuer.issuer.EXCEL_INPUT_FILE', excel_file):
-            # Should not raise - exception is caught and logged
-            issuer.issue()
+        # Should not raise - exception is caught and logged
+        issuer.issue()
 
         captured = capsys.readouterr()
         assert "실패: 1" in captured.out
         assert "Connection timeout" in captured.out
 
-    def test_issue_single_coupon_raises_on_zero_discount(self, coupon_dict_factory, requests_mock):
+    def test_issue_single_coupon_raises_on_zero_discount(self, tmp_path, coupon_dict_factory):
         """
         Test _issue_single_coupon() with discount=0.
 
         Covers: issuer.py line 130
         Expected: ValueError 발생, 쿠폰명 포함
         """
-        issuer = CouponIssuer("a", "s", "u", "v")
+        issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
 
         coupon = coupon_dict_factory(discount=0)
 
@@ -678,14 +663,14 @@ class TestIssuerEdgeCases:
         assert "할인금액/비율이 설정되지 않았습니다" in str(exc_info.value)
         assert "테스트쿠폰" in str(exc_info.value)
 
-    def test_issue_single_coupon_unknown_type(self, coupon_dict_factory):
+    def test_issue_single_coupon_unknown_type(self, tmp_path, coupon_dict_factory):
         """
         Test _issue_single_coupon() with invalid coupon type.
 
         Covers: issuer.py line 192
         Expected: 실패 상태, "알 수 없는 쿠폰 타입" 메시지
         """
-        issuer = CouponIssuer("a", "s", "u", "v")
+        issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
 
         coupon = coupon_dict_factory(type='잘못된타입')
 
@@ -702,7 +687,7 @@ class TestIssuerEdgeCases:
         Covers: issuer.py line 235
         Expected: ValueError: "시트를 찾을 수 없습니다"
         """
-        excel_file = tmp_path / "empty_wb.xlsx"
+        excel_file = tmp_path / "coupons.xlsx"
 
         # Create minimal valid workbook (openpyxl requires at least one visible sheet to save)
         wb = Workbook()
@@ -710,19 +695,18 @@ class TestIssuerEdgeCases:
         assert ws is not None
         wb.save(excel_file)
 
-        issuer = CouponIssuer("a", "s", "u", "v")
+        issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
 
         # Mock load_workbook to return a workbook with no active sheet
-        with patch('coupang_coupon_issuer.issuer.EXCEL_INPUT_FILE', excel_file):
-            with patch('coupang_coupon_issuer.issuer.load_workbook') as mock_load:
-                mock_wb = MagicMock()
-                mock_wb.active = None
-                mock_load.return_value = mock_wb
+        with patch('coupang_coupon_issuer.issuer.load_workbook') as mock_load:
+            mock_wb = MagicMock()
+            mock_wb.active = None
+            mock_load.return_value = mock_wb
 
-                with pytest.raises(ValueError) as exc_info:
-                    issuer._fetch_coupons_from_excel()
+            with pytest.raises(ValueError) as exc_info:
+                issuer._fetch_coupons_from_excel()
 
-                assert "시트를 찾을 수 없습니다" in str(exc_info.value)
+            assert "시트를 찾을 수 없습니다" in str(exc_info.value)
 
     def test_fetch_coupons_invalid_coupon_type(self, tmp_path):
         """
@@ -731,7 +715,7 @@ class TestIssuerEdgeCases:
         Covers: issuer.py lines 269-271
         Expected: ValueError: "잘못된 쿠폰 타입"
         """
-        excel_file = tmp_path / "invalid_type.xlsx"
+        excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
@@ -739,14 +723,13 @@ class TestIssuerEdgeCases:
         ws.append(["테스트쿠폰", "무료쿠폰", 30, "RATE", 10, ""])  # Invalid type
         wb.save(excel_file)
 
-        issuer = CouponIssuer("a", "s", "u", "v")
+        issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
 
-        with patch('coupang_coupon_issuer.issuer.EXCEL_INPUT_FILE', excel_file):
-            with pytest.raises(ValueError) as exc_info:
-                issuer._fetch_coupons_from_excel()
+        with pytest.raises(ValueError) as exc_info:
+            issuer._fetch_coupons_from_excel()
 
-            assert "잘못된 쿠폰 타입" in str(exc_info.value)
-            assert "즉시할인 또는 다운로드쿠폰만 가능" in str(exc_info.value)
+        assert "잘못된 쿠폰 타입" in str(exc_info.value)
+        assert "즉시할인 또는 다운로드쿠폰만 가능" in str(exc_info.value)
 
     def test_fetch_coupons_invalid_discount_method(self, tmp_path):
         """
@@ -755,7 +738,7 @@ class TestIssuerEdgeCases:
         Covers: issuer.py lines 294-296
         Expected: ValueError: "잘못된 할인방식"
         """
-        excel_file = tmp_path / "invalid_method.xlsx"
+        excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
@@ -763,14 +746,13 @@ class TestIssuerEdgeCases:
         ws.append(["테스트쿠폰", "즉시할인", 30, "FREE", 10, ""])  # Invalid method
         wb.save(excel_file)
 
-        issuer = CouponIssuer("a", "s", "u", "v")
+        issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
 
-        with patch('coupang_coupon_issuer.issuer.EXCEL_INPUT_FILE', excel_file):
-            with pytest.raises(ValueError) as exc_info:
-                issuer._fetch_coupons_from_excel()
+        with pytest.raises(ValueError) as exc_info:
+            issuer._fetch_coupons_from_excel()
 
-            assert "잘못된 할인방식" in str(exc_info.value)
-            assert "RATE/FIXED_WITH_QUANTITY/PRICE만 가능" in str(exc_info.value)
+        assert "잘못된 할인방식" in str(exc_info.value)
+        assert "RATE/FIXED_WITH_QUANTITY/PRICE만 가능" in str(exc_info.value)
 
     def test_fetch_coupons_non_numeric_discount(self, tmp_path):
         """
@@ -780,7 +762,7 @@ class TestIssuerEdgeCases:
         Expected: ValueError with message about discount being 0 or less
         (non-numeric strings like "abc" become 0 after regex extraction)
         """
-        excel_file = tmp_path / "invalid_discount.xlsx"
+        excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
@@ -788,14 +770,13 @@ class TestIssuerEdgeCases:
         ws.append(["테스트쿠폰", "즉시할인", 30, "RATE", "abc", ""])  # Non-numeric becomes 0
         wb.save(excel_file)
 
-        issuer = CouponIssuer("a", "s", "u", "v")
+        issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
 
-        with patch('coupang_coupon_issuer.issuer.EXCEL_INPUT_FILE', excel_file):
-            with pytest.raises(ValueError) as exc_info:
-                issuer._fetch_coupons_from_excel()
+        with pytest.raises(ValueError) as exc_info:
+            issuer._fetch_coupons_from_excel()
 
-            # "abc" is stripped to "" by regex, converted to 0, caught by > 0 check
-            assert "할인금액/비율은 0보다 커야 합니다" in str(exc_info.value)
+        # "abc" is stripped to "" by regex, converted to 0, caught by > 0 check
+        assert "할인금액/비율은 0보다 커야 합니다" in str(exc_info.value)
 
     def test_fetch_coupons_downloadable_with_zero_issue_count(self, tmp_path):
         """
@@ -804,7 +785,7 @@ class TestIssuerEdgeCases:
         Covers: issuer.py lines 324-328
         Expected: ValueError: "1 이상이어야 합니다"
         """
-        excel_file = tmp_path / "zero_count.xlsx"
+        excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
@@ -812,13 +793,12 @@ class TestIssuerEdgeCases:
         ws.append(["테스트쿠폰", "다운로드쿠폰", 30, "RATE", 10, 0])  # issue_count=0
         wb.save(excel_file)
 
-        issuer = CouponIssuer("a", "s", "u", "v")
+        issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
 
-        with patch('coupang_coupon_issuer.issuer.EXCEL_INPUT_FILE', excel_file):
-            with pytest.raises(ValueError) as exc_info:
-                issuer._fetch_coupons_from_excel()
+        with pytest.raises(ValueError) as exc_info:
+            issuer._fetch_coupons_from_excel()
 
-            assert "발급개수는 1 이상이어야 합니다" in str(exc_info.value)
+        assert "발급개수는 1 이상이어야 합니다" in str(exc_info.value)
 
     def test_fetch_coupons_downloadable_with_invalid_issue_count(self, tmp_path):
         """
@@ -828,7 +808,7 @@ class TestIssuerEdgeCases:
         Expected: Non-numeric strings like "xyz" are normalized to empty string,
                   which triggers default value usage (no exception)
         """
-        excel_file = tmp_path / "invalid_count.xlsx"
+        excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
@@ -836,14 +816,13 @@ class TestIssuerEdgeCases:
         ws.append(["테스트쿠폰", "다운로드쿠폰", 30, "RATE", 10, "xyz"])  # Non-numeric -> default value
         wb.save(excel_file)
 
-        issuer = CouponIssuer("a", "s", "u", "v")
+        issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
 
-        with patch('coupang_coupon_issuer.issuer.EXCEL_INPUT_FILE', excel_file):
-            # Should not raise - "xyz" becomes empty string, uses default value
-            coupons = issuer._fetch_coupons_from_excel()
+        # Should not raise - "xyz" becomes empty string, uses default value
+        coupons = issuer._fetch_coupons_from_excel()
 
-            assert len(coupons) == 1
-            assert coupons[0]['issue_count'] == COUPON_DEFAULT_ISSUE_COUNT
+        assert len(coupons) == 1
+        assert coupons[0]['issue_count'] == COUPON_DEFAULT_ISSUE_COUNT
 
     def test_validate_fixed_with_quantity_minimum(self, tmp_path):
         """
@@ -852,7 +831,7 @@ class TestIssuerEdgeCases:
         Covers: issuer.py lines 306-307 (general discount > 0 check first)
         Expected: ValueError from line 307 catches this before FIXED_WITH_QUANTITY check
         """
-        excel_file = tmp_path / "fwq_zero.xlsx"
+        excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
@@ -860,11 +839,10 @@ class TestIssuerEdgeCases:
         ws.append(["테스트쿠폰", "즉시할인", 30, "FIXED_WITH_QUANTITY", 0, ""])  # discount=0
         wb.save(excel_file)
 
-        issuer = CouponIssuer("a", "s", "u", "v")
+        issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
 
-        with patch('coupang_coupon_issuer.issuer.EXCEL_INPUT_FILE', excel_file):
-            with pytest.raises(ValueError) as exc_info:
-                issuer._fetch_coupons_from_excel()
+        with pytest.raises(ValueError) as exc_info:
+            issuer._fetch_coupons_from_excel()
 
-            # General check (line 307) happens before FIXED_WITH_QUANTITY check (line 344)
-            assert "할인금액/비율은 0보다 커야 합니다" in str(exc_info.value)
+        # General check (line 307) happens before FIXED_WITH_QUANTITY check (line 344)
+        assert "할인금액/비율은 0보다 커야 합니다" in str(exc_info.value)

@@ -1,6 +1,17 @@
 # ADR 012: XDG Base Directory Specification 적용
 
-**상태**: 승인됨
+> **⚠️ DEPRECATED**: 이 ADR은 ADR 013 (PyInstaller 단일 실행 파일)로 완전히 대체되었습니다.
+>
+> 날짜: 2024-12-21
+> 사유: XDG 표준 준수 → 실행 파일 위치 기반 단순 구조로 전환
+> 변경사항:
+> - XDG_CONFIG_HOME, XDG_STATE_HOME 사용 중단
+> - `~/.config/coupang_coupon_issuer/` → `<실행파일위치>/`
+> - `~/.local/state/coupang_coupon_issuer/` → `<실행파일위치>/`
+>
+> 참조: [ADR 013: PyInstaller 단일 실행 파일 배포](./013-pyinstaller-single-binary.md)
+
+**상태**: ~~승인됨~~ **대체됨**
 **날짜**: 2024-12-20
 **결정자**: 프로젝트 오너
 

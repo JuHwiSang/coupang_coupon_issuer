@@ -1,9 +1,14 @@
 # ADR 008: CLI 구조 재설계
 
-> **⚠️ PARTIALLY SUPERSEDED**: serve 명령어는 ADR 010 (crontab-service)로 제거되었습니다.
+> **⚠️ DEPRECATED**: 이 ADR은 ADR 013 (PyInstaller 단일 실행 파일)로 대체되었습니다.
 >
-> 날짜: 2024-12-19
-> 참조: [ADR 010: Crontab 기반 스케줄링](./010-crontab-service.md)
+> 날짜: 2024-12-21
+> 변경사항:
+> - `serve` 명령어 제거 (ADR 010)
+> - `apply` 명령어 → `verify` 명령어 (ADR 013)
+> - 전역 명령어 제거, PyInstaller 단일 실행 파일로 전환
+>
+> 참조: [ADR 013: PyInstaller 단일 실행 파일 배포](./013-pyinstaller-single-binary.md)
 
 **상태**: 승인됨 (일부 대체됨)
 **날짜**: 2024-12-17

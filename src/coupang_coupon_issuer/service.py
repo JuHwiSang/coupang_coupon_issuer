@@ -7,28 +7,11 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
-from .config import SERVICE_NAME, LOG_DIR, LOG_FILE
+from .config import SERVICE_NAME, ConfigManager, get_log_file
 
 
 class CrontabService:
     """Cron 기반 서비스 설치/제거 관리 클래스"""
-
-    # Cron job 식별 마커
-    CRON_MARKER = "# coupang_coupon_issuer_job"
-
-    @staticmethod
-    def _check_root() -> None:
-        """root 권한 확인 (Linux 전용)"""
-        # Windows에서는 os.geteuid()가 없으므로 체크
-        if not hasattr(os, "geteuid"):
-            print("WARNING: Windows 환경입니다. Linux 서버에서 실행하세요.", flush=True)
-            return
-
-        if os.geteuid() != 0:  # type: ignore  # Windows 환경에서는 이 함수가 없음
-            raise PermissionError(
-                "root 권한이 필요합니다.\n"
-                f"다음 명령어로 실행하세요: sudo python3 {sys.argv[0]} {sys.argv[1]}"
-            )
 
     @staticmethod
     def _detect_cron_system() -> Optional[str]:
@@ -157,7 +140,7 @@ class CrontabService:
     @staticmethod
     def _get_current_crontab() -> str:
         """
-        현재 root crontab 읽기
+        현재 사용자 crontab 읽기
 
         Returns:
             현재 crontab 내용 (없으면 빈 문자열)
@@ -177,20 +160,12 @@ class CrontabService:
     @staticmethod
     def _add_cron_job(job_line: str) -> None:
         """
-        root crontab에 cron job 추가
+        사용자 crontab에 cron job 추가 (UUID 기반 업데이트)
 
         Args:
-            job_line: 마커 주석이 포함된 cron job 라인
+            job_line: UUID 마커 주석이 포함된 cron job 라인
         """
         current = CrontabService._get_current_crontab()
-
-        # 기존 job이 있는지 확인
-        if CrontabService.CRON_MARKER in current:
-            print("기존 cron job을 발견했습니다. 업데이트 중...", flush=True)
-            # 기존 job 제거 (마커로만 판단)
-            lines = current.split('\n')
-            filtered = [line for line in lines if CrontabService.CRON_MARKER not in line]
-            current = '\n'.join(filtered)
 
         # 새 job 추가
         new_crontab = current.rstrip() + '\n' + job_line + '\n'
@@ -209,18 +184,23 @@ class CrontabService:
         print(f"Cron job이 성공적으로 추가되었습니다", flush=True)
 
     @staticmethod
-    def _remove_cron_job() -> None:
-        """root crontab에서 cron job 제거"""
-        current = CrontabService._get_current_crontab()
+    def _remove_crontab_by_uuid(uuid_str: str) -> None:
+        """
+        UUID 주석 포함 라인 제거
 
-        if CrontabService.CRON_MARKER not in current:
-            print("제거할 cron job이 없습니다", flush=True)
+        Args:
+            uuid_str: 제거할 설치의 UUID
+        """
+        current = CrontabService._get_current_crontab()
+        marker = f"# coupang_coupon_issuer_job:{uuid_str}"
+
+        if marker not in current:
+            print(f"제거할 cron job이 없습니다 (UUID: {uuid_str})", flush=True)
             return
 
-        # 우리의 job만 필터링
+        # UUID 마커가 포함된 라인만 필터링
         lines = current.split('\n')
-        filtered = [line for line in lines
-                   if CrontabService.CRON_MARKER not in line]
+        filtered = [line for line in lines if marker not in line]
 
         new_crontab = '\n'.join(filtered).strip() + '\n'
 
@@ -235,10 +215,11 @@ class CrontabService:
         if result.returncode != 0:
             raise RuntimeError(f"Crontab 업데이트 실패: {result.stderr}")
 
-        print("Cron job이 성공적으로 제거되었습니다", flush=True)
+        print(f"Cron job이 성공적으로 제거되었습니다 (UUID: {uuid_str})", flush=True)
 
     @staticmethod
     def install(
+        base_dir: Path,
         access_key: str,
         secret_key: str,
         user_id: str,
@@ -249,83 +230,34 @@ class CrontabService:
         Cron 기반 서비스 설치
 
         절차:
-        1. 파일 복사 (/opt)
-        2. 심볼릭 링크 생성
-        3. Python 의존성 설치
-        4. Credentials 저장
-        5. Cron 감지/설치/활성화
-        6. 로그 디렉토리 생성
-        7. Cron job 추가
+        1. config.json 로드/생성 (UUID 관리)
+        2. Cron 감지/설치/활성화
+        3. Cron job 추가 (절대경로 + UUID 주석)
 
         Args:
+            base_dir: 작업 디렉토리
             access_key: Coupang Access Key
             secret_key: Coupang Secret Key
             user_id: WING 사용자 ID
             vendor_id: 판매자 ID
             jitter_max: 최대 Jitter 시간 (분 단위, None이면 jitter 미사용)
         """
-        CrontabService._check_root()
-
         print(f"\n서비스 설치 중: {SERVICE_NAME}")
 
-        # 1. 파일 복사
-        print("\n파일 복사 중...", flush=True)
-        # __file__ = /app/src/coupang_coupon_issuer/service.py
-        # src_package_dir = /app/src/coupang_coupon_issuer
-        # src_dir = /app/src
-        # project_root = /app
-        src_package_dir = Path(__file__).parent
-        src_dir = src_package_dir.parent
-        project_root = src_dir.parent
-        install_dir = Path("/opt/coupang_coupon_issuer")
+        # 1. config.json 로드/생성 (UUID 관리)
+        existing_uuid = ConfigManager.get_installation_id(base_dir)
+        if existing_uuid:
+            # 기존 설치 존재 → 먼저 제거
+            print(f"\n기존 설치 발견 (UUID: {existing_uuid}), 기존 cron job 제거 중...", flush=True)
+            CrontabService._remove_crontab_by_uuid(existing_uuid)
 
-        install_dir.mkdir(parents=True, exist_ok=True)
-
-        # main.py, src/, pyproject.toml 복사
-        shutil.copy2(project_root / "main.py", install_dir / "main.py")
-        print(f"복사: main.py")
-
-        if (install_dir / "src").exists():
-            shutil.rmtree(install_dir / "src")
-        shutil.copytree(src_dir, install_dir / "src")
-        print(f"복사: src/")
-
-        if (project_root / "pyproject.toml").exists():
-            shutil.copy2(project_root / "pyproject.toml", install_dir / "pyproject.toml")
-            print(f"복사: pyproject.toml")
-
-        # 실행 권한 설정
-        (install_dir / "main.py").chmod(0o755)
-        print(f"실행 권한 설정: main.py (755)")
-
-        # 2. 심볼릭 링크 생성
-        print("\n심볼릭 링크 생성 중...", flush=True)
-        symlink_path = Path("/usr/local/bin/coupang_coupon_issuer")
-        script_path = install_dir / "main.py"
-
-        if symlink_path.exists() or symlink_path.is_symlink():
-            symlink_path.unlink()
-            print(f"기존 심볼릭 링크 제거: {symlink_path}")
-
-        symlink_path.symlink_to(script_path)
-        print(f"심볼릭 링크 생성: {symlink_path} -> {script_path}")
-
-        # 3. Python 의존성 설치
-        print("\nPython 의존성 설치 중...", flush=True)
-        python_path = "/usr/bin/python3"
-        ret = os.system(f"{python_path} -m pip install requests openpyxl")
-        if ret != 0:
-            print("WARNING: 의존성 설치 실패. 수동으로 설치하세요:")
-            print(f"  {python_path} -m pip install requests openpyxl")
-        else:
-            print("의존성 설치 완료")
-
-        # 4. API 키 및 쿠폰 정보 저장
+        # 새 UUID 생성 및 저장
         print("\nAPI 키 및 쿠폰 정보 저장 중...", flush=True)
-        from .config import CredentialManager
-        CredentialManager.save_credentials(access_key, secret_key, user_id, vendor_id)
+        new_uuid = ConfigManager.save_config(
+            base_dir, access_key, secret_key, user_id, vendor_id
+        )
 
-        # 5. Cron 감지/설치/활성화
+        # 2. Cron 감지/설치/활성화
         cron_system = CrontabService._detect_cron_system()
 
         if cron_system is None:
@@ -335,107 +267,62 @@ class CrontabService:
 
         CrontabService._enable_cron_service()
 
-        # 6. 로그 디렉토리 생성
-        print(f"\n로그 디렉토리 생성 중: {LOG_DIR}", flush=True)
-        LOG_DIR.mkdir(parents=True, exist_ok=True)
-        LOG_DIR.chmod(0o755)
-
-        # 로그 파일 생성
-        LOG_FILE.touch(exist_ok=True)
-        LOG_FILE.chmod(0o644)
-        print(f"로그 파일 생성: {LOG_FILE}")
-
-        # 7. Cron job 추가
+        # 3. Cron job 추가 (Python 스크립트 경로 + UUID 주석)
         print("\nCron job 추가 중...", flush=True)
 
+        # main.py 스크립트 경로
+        main_script = Path(__file__).parent.parent.parent / "main.py"
+        if not main_script.exists():
+            raise FileNotFoundError(f"main.py not found: {main_script}")
+
+        python_exe = sys.executable or "python3"
+        log_path = get_log_file(base_dir)
+
+        # Cron 명령어 구성
+        cron_cmd = f"{python_exe} {main_script.resolve()} issue {base_dir.resolve()}"
+
         # Jitter 옵션 포함
-        jitter_option = ""
         if jitter_max is not None and jitter_max > 0:
-            jitter_option = f" --jitter-max {jitter_max}"
+            cron_cmd += f" --jitter-max {jitter_max}"
             print(f"Jitter 설정: 최대 {jitter_max}분 랜덤 지연", flush=True)
 
         cron_job = (
-            f"0 0 * * * {python_path} {script_path} issue{jitter_option} "
-            f">> {LOG_FILE} 2>&1  {CrontabService.CRON_MARKER}"
+            f"0 0 * * * {cron_cmd} >> {log_path} 2>&1  "
+            f"# coupang_coupon_issuer_job:{new_uuid}"
         )
         CrontabService._add_cron_job(cron_job)
 
         print("\n설치 완료!")
-        print(f"전역 명령어: coupang_coupon_issuer")
+        print(f"Python 실행: {python_exe}")
+        print(f"스크립트: {main_script}")
+        print(f"작업 디렉토리: {base_dir}")
+        print(f"설정 파일: {base_dir / 'config.json'}")
         print(f"Cron 스케줄: 매일 00:00{' (Jitter 활성화)' if jitter_max else ''}")
         if jitter_max:
             print(f"  → 실제 실행: 00:00 ~ {jitter_max//60:02d}:{jitter_max%60:02d} 사이")
-        print(f"로그 확인: tail -f {LOG_FILE}")
+        print(f"로그 확인: tail -f {log_path}")
         print(f"Cron 확인: crontab -l")
-        print(f"수동 실행: coupang_coupon_issuer issue")
 
     @staticmethod
-    def uninstall() -> None:
-        """Cron 기반 서비스 제거"""
-        CrontabService._check_root()
+    def uninstall(base_dir: Path) -> None:
+        """Cron 기반 서비스 제거
 
+        Args:
+            base_dir: 작업 디렉토리
+        """
         print(f"서비스 제거 중: {SERVICE_NAME}")
 
-        # 1. Cron job 제거
+        # config.json에서 UUID 읽기
+        installation_id = ConfigManager.get_installation_id(base_dir)
+        if not installation_id:
+            print("\nWARNING: config.json에 installation_id가 없습니다", flush=True)
+            print("수동으로 crontab을 확인하세요: crontab -l", flush=True)
+            return
+
+        # UUID로 crontab 검색/삭제
         print("\nCron job 제거 중...", flush=True)
-        CrontabService._remove_cron_job()
-
-        # 2. 심볼릭 링크 삭제
-        symlink_path = Path("/usr/local/bin/coupang_coupon_issuer")
-        if symlink_path.exists() or symlink_path.is_symlink():
-            try:
-                symlink_path.unlink()
-                print(f"심볼릭 링크 삭제: {symlink_path}")
-            except Exception as e:
-                print(f"ERROR: 심볼릭 링크 삭제 실패: {e}")
-
-        # 3. 설치 디렉토리 삭제 확인
-        install_dir = Path("/opt/coupang_coupon_issuer")
-        if install_dir.exists():
-            response = input(f"\n설치 디렉토리도 삭제하시겠습니까? ({install_dir}) [y/N]: ")
-            if response.lower() == 'y':
-                try:
-                    shutil.rmtree(install_dir)
-                    print(f"설치 디렉토리 삭제: {install_dir}")
-                except Exception as e:
-                    print(f"ERROR: 설치 디렉토리 삭제 실패: {e}")
-            else:
-                print("설치 디렉토리는 유지됩니다.")
-
-        # 4. API 키 파일 삭제 여부 확인
-        from .config import CONFIG_FILE
-        if CONFIG_FILE.exists():
-            response = input(f"\nAPI 키 파일도 삭제하시겠습니까? ({CONFIG_FILE}) [y/N]: ")
-            if response.lower() == 'y':
-                try:
-                    CONFIG_FILE.unlink()
-                    print(f"API 키 파일 삭제: {CONFIG_FILE}")
-                except Exception as e:
-                    print(f"ERROR: API 키 파일 삭제 실패: {e}")
-            else:
-                print("API 키 파일은 유지됩니다.")
-
-        # 5. 엑셀 파일 삭제 확인
-        coupons_file = Path("/etc/coupang_coupon_issuer/coupons.xlsx")
-        if coupons_file.exists():
-            response = input(f"\n엑셀 파일도 삭제하시겠습니까? ({coupons_file}) [y/N]: ")
-            if response.lower() == 'y':
-                try:
-                    coupons_file.unlink()
-                    print(f"엑셀 파일 삭제: {coupons_file}")
-                except Exception as e:
-                    print(f"ERROR: 엑셀 파일 삭제 실패: {e}")
-
-        # 6. 로그 디렉토리 삭제 확인
-        if LOG_DIR.exists():
-            response = input(f"\n로그 디렉토리도 삭제하시겠습니까? ({LOG_DIR}) [y/N]: ")
-            if response.lower() == 'y':
-                try:
-                    shutil.rmtree(LOG_DIR)
-                    print(f"로그 디렉토리 삭제: {LOG_DIR}")
-                except Exception as e:
-                    print(f"ERROR: 로그 디렉토리 삭제 실패: {e}")
-            else:
-                print("로그 디렉토리는 유지됩니다.")
+        CrontabService._remove_crontab_by_uuid(installation_id)
 
         print("\n제거 완료!")
+        print(f"설정 파일 유지: {base_dir}")
+        print(f"완전 삭제: rm -rf {base_dir}")
