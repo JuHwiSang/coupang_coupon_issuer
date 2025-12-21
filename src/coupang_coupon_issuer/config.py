@@ -232,6 +232,16 @@ class ConfigManager:
 
         return access_key, secret_key, user_id, vendor_id
 
+    @staticmethod
+    def remove(base_dir: Path) -> None:
+        """설정 파일 제거"""
+        config_file = get_config_file(base_dir)
+        if config_file.exists():
+            config_file.unlink()
+            print(f"설정 파일이 제거되었습니다: {config_file}")
+        else:
+            print(f"설정 파일이 존재하지 않습니다: {config_file}")
+
 
 # 레거시 호환성 (deprecated)
 CredentialManager = ConfigManager

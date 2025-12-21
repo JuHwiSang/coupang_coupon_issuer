@@ -322,7 +322,8 @@ class CrontabService:
         # UUID로 crontab 검색/삭제
         print("\nCron job 제거 중...", flush=True)
         CrontabService._remove_crontab_by_uuid(installation_id)
+        
+        print("\n설정 파일 제거 중...", flush=True)
+        ConfigManager.remove(base_dir)
 
         print("\n제거 완료!")
-        print(f"설정 파일 유지: {base_dir}")
-        print(f"완전 삭제: rm -rf {base_dir}")
