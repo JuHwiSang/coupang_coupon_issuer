@@ -133,7 +133,7 @@ class CoupangAPIClient:
         coupon_type: str = "PRICE"
     ) -> Dict[str, Any]:
         """
-        즉시할인쿠폰 생성
+        즉시할인쿠폰 생성 (비동기 API)
 
         Args:
             vendor_id: 판매자 ID (예: A00012345)
@@ -146,7 +146,9 @@ class CoupangAPIClient:
             coupon_type: 할인 방식 (RATE/FIXED_WITH_QUANTITY/PRICE)
 
         Returns:
-            API 응답 데이터 (requestedId 포함)
+            API 응답 전체 (dict)
+            - data.content.requestedId: 상태 확인용 요청 ID
+            - data.content.success: 요청 성공 여부
         """
         path = f"/v2/providers/fms/apis/api/v2/vendors/{vendor_id}/coupon"
 
@@ -162,6 +164,56 @@ class CoupangAPIClient:
 
         return self._request("POST", path, json_data=payload)
 
+    def apply_instant_coupon(
+        self,
+        vendor_id: str,
+        coupon_id: int,
+        vendor_items: List[int]
+    ) -> Dict[str, Any]:
+        """
+        즉시할인쿠폰 아이템 적용 (비동기 API)
+
+        Args:
+            vendor_id: 판매자 ID (예: A00012345)
+            coupon_id: 쿠폰 ID (create_instant_coupon의 상태 확인 후 획득)
+            vendor_items: 쿠폰을 적용할 옵션ID 리스트 (최대 10,000개)
+
+        Returns:
+            API 응답 전체 (dict)
+            - data.content.requestedId: 상태 확인용 요청 ID
+            - data.content.success: 요청 성공 여부
+        """
+        path = f"/v2/providers/fms/apis/api/v1/vendors/{vendor_id}/coupons/{coupon_id}/items"
+
+        payload = {
+            "vendorItems": vendor_items
+        }
+
+        return self._request("POST", path, json_data=payload)
+    
+    def get_instant_coupon_status(
+        self,
+        vendor_id: str,
+        requested_id: str
+    ) -> Dict[str, Any]:
+        """
+        즉시할인쿠폰 요청 상태 확인 (쿠폰 생성/아이템 적용 공통)
+
+        Args:
+            vendor_id: 판매자 ID (예: A00012345)
+            requested_id: 요청 ID (create_instant_coupon 또는 apply_instant_coupon에서 획득)
+
+        Returns:
+            API 응답 전체 (dict)
+            - data.content.status: REQUESTED/DONE/FAIL
+            - data.content.couponId: 쿠폰 ID (쿠폰 생성 시)
+            - data.content.failedVendorItems: 실패한 옵션ID 리스트 (아이템 적용 시)
+        """
+        path = f"/v2/providers/fms/apis/api/v1/vendors/{vendor_id}/requested/{requested_id}"
+
+        return self._request("GET", path)
+    
+
     def create_download_coupon(
         self,
         contract_id: int,
@@ -172,7 +224,7 @@ class CoupangAPIClient:
         policies: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
         """
-        다운로드쿠폰 생성
+        다운로드쿠폰 생성 (동기 API - 즉시 couponId 반환)
 
         Args:
             contract_id: 계약서 ID
@@ -195,7 +247,9 @@ class CoupangAPIClient:
                 ]
 
         Returns:
-            API 응답 데이터 (couponId 포함)
+            API 응답 전체 (dict)
+            - couponId: 쿠폰 ID (바로 사용 가능)
+            - couponStatus: 쿠폰 상태 (STANDBY)
         """
         path = "/v2/providers/marketplace_openapi/apis/api/v1/coupons"
 
@@ -210,3 +264,40 @@ class CoupangAPIClient:
         }
 
         return self._request("POST", path, json_data=payload)
+
+    def apply_download_coupon(
+        self,
+        coupon_id: int,
+        user_id: str,
+        vendor_items: List[int]
+    ) -> Dict[str, Any]:
+        """
+        다운로드쿠폰 아이템 적용 (동기 API)
+
+        Args:
+            coupon_id: 쿠폰 ID (create_download_coupon에서 획득)
+            user_id: 사용자 계정 (WING 로그인 ID)
+            vendor_items: 쿠폰을 적용할 옵션ID 리스트 (최대 100개)
+
+        Returns:
+            API 응답 전체 (dict)
+            - requestResultStatus: SUCCESS/FAIL
+            - body.couponId: 쿠폰 ID
+            - errorMessage: 실패 시 오류 메시지
+
+        Note:
+            아이템 적용 실패 시 쿠폰이 자동으로 파기됩니다.
+        """
+        path = "/v2/providers/marketplace_openapi/apis/api/v1/coupon-items"
+
+        payload = {
+            "couponItems": [
+                {
+                    "couponId": str(coupon_id),
+                    "userId": user_id,
+                    "vendorItemIds": vendor_items
+                }
+            ]
+        }
+
+        return self._request("PUT", path, json_data=payload)

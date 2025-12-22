@@ -118,6 +118,7 @@ class CouponIssuer:
                     'discount_type': 'RATE' or 'FIXED_WITH_QUANTITY' or 'PRICE',
                     'discount': 10,  (할인금액/비율, Column E)
                     'issue_count': 100,  (발급개수, Column F, 다운로드쿠폰만 사용)
+                    'vendor_items': [3226138951, 3226138847],  (옵션ID 리스트, Column G)
                 }
 
         Returns:
@@ -130,10 +131,13 @@ class CouponIssuer:
         discount_type = coupon.get('discount_type', 'PRICE')
         discount = coupon.get('discount', 0)  # Column E: 할인금액/비율 (필수)
         issue_count = coupon.get('issue_count')  # Column F: 발급개수 (선택적)
+        vendor_items = coupon.get('vendor_items', [])  # Column G: 옵션ID 리스트 (필수)
 
         # Validate required fields
         if discount <= 0:
             raise ValueError(f"할인금액/비율이 설정되지 않았습니다: {coupon_name}")
+        if not vendor_items:
+            raise ValueError(f"옵션ID가 설정되지 않았습니다: {coupon_name}")
 
         print(f"[{timestamp}] [{index}] {coupon_name} ({coupon_type}) 발급 중...", flush=True)
 
@@ -154,45 +158,28 @@ class CouponIssuer:
             end_date = (today + timedelta(days=validity_days)).strftime('%Y-%m-%d %H:%M:%S')
 
             if coupon_type == '즉시할인':
-                assert self.vendor_id is not None
-                api_result = self.api_client.create_instant_coupon(
-                    vendor_id=self.vendor_id,
-                    contract_id=COUPON_CONTRACT_ID,
-                    name=coupon_name,
-                    max_discount_price=COUPON_MAX_DISCOUNT,
-                    discount=discount,  # Column E: 할인금액/할인율
-                    start_at=start_date,
-                    end_at=end_date,
-                    coupon_type=discount_type
-                )
-
-                result['status'] = '성공'
-                result['message'] = f"즉시할인쿠폰 생성 완료 (requestedId: {api_result.get('data', {}).get('requestedId', 'N/A')})"
-
-            elif coupon_type == '다운로드쿠폰':
-                assert self.user_id is not None
-                assert issue_count is not None  # Should have been set by _fetch_coupons_from_excel
-                # 다운로드쿠폰 정책 구성
-                policy = {
-                    "title": coupon_name,
-                    "typeOfDiscount": discount_type,
-                    "description": f"{coupon_name} ({validity_days}일간 유효)",
-                    "discount": discount,  # Column E: 할인금액/할인율
-                    "maximumDiscountPrice": COUPON_MAX_DISCOUNT,
-                    "maximumPerDaily": issue_count  # Column F: 일 최대 발급개수
-                }
-
-                api_result = self.api_client.create_download_coupon(
-                    contract_id=COUPON_CONTRACT_ID,
-                    title=coupon_name,
+                result['message'] = self._issue_instant_coupon(
+                    coupon_name=coupon_name,
+                    discount_type=discount_type,
+                    discount=discount,
                     start_date=start_date,
                     end_date=end_date,
-                    user_id=self.user_id,
-                    policies=[policy]
+                    vendor_items=vendor_items
                 )
-
                 result['status'] = '성공'
-                result['message'] = f"다운로드쿠폰 생성 완료 (couponId: {api_result.get('data', {}).get('couponId', 'N/A')})"
+
+            elif coupon_type == '다운로드쿠폰':
+                result['message'] = self._issue_download_coupon(
+                    coupon_name=coupon_name,
+                    discount_type=discount_type,
+                    discount=discount,
+                    issue_count=issue_count,
+                    start_date=start_date,
+                    end_date=end_date,
+                    vendor_items=vendor_items,
+                    validity_days=validity_days
+                )
+                result['status'] = '성공'
 
             else:
                 result['message'] = f"알 수 없는 쿠폰 타입: {coupon_type}"
@@ -206,17 +193,163 @@ class CouponIssuer:
 
         return result
 
+    def _issue_instant_coupon(
+        self,
+        coupon_name: str,
+        discount_type: str,
+        discount: int,
+        start_date: str,
+        end_date: str,
+        vendor_items: List[int]
+    ) -> str:
+        """
+        즉시할인쿠폰 발급 (비동기 워크플로우)
+
+        Args:
+            coupon_name: 쿠폰 이름
+            discount_type: 할인 방식 (RATE/FIXED_WITH_QUANTITY/PRICE)
+            discount: 할인금액/비율
+            start_date: 유효 시작일
+            end_date: 유효 종료일
+            vendor_items: 옵션ID 리스트
+
+        Returns:
+            성공 메시지 문자열
+
+        Raises:
+            AssertionError: API 호출 실패 시
+        """
+        assert self.vendor_id is not None, "vendor_id가 설정되지 않았습니다"
+
+        # 1단계: 쿠폰 생성
+        response1 = self.api_client.create_instant_coupon(
+            vendor_id=self.vendor_id,
+            contract_id=COUPON_CONTRACT_ID,
+            name=coupon_name,
+            max_discount_price=COUPON_MAX_DISCOUNT,
+            discount=discount,
+            start_at=start_date,
+            end_at=end_date,
+            coupon_type=discount_type
+        )
+
+        req_id1 = response1.get('data', {}).get('content', {}).get('requestedId')
+        assert req_id1 is not None, "즉시할인쿠폰 생성 실패 (requestedId 없음)"
+
+        # 2단계: 쿠폰 생성 상태 확인
+        response2 = self.api_client.get_instant_coupon_status(self.vendor_id, req_id1)
+        content2 = response2.get('data', {}).get('content', {})
+        status2 = content2.get('status')
+
+        assert status2 == 'DONE', f"즉시할인쿠폰 생성 실패 (status={status2})"
+
+        coupon_id = content2.get('couponId')
+        assert coupon_id is not None, "즉시할인쿠폰 생성 실패 (couponId 없음)"
+
+        # 3단계: 아이템 적용
+        response3 = self.api_client.apply_instant_coupon(
+            vendor_id=self.vendor_id,
+            coupon_id=coupon_id,
+            vendor_items=vendor_items
+        )
+
+        req_id2 = response3.get('data', {}).get('content', {}).get('requestedId')
+        assert req_id2 is not None, "즉시할인쿠폰 아이템 적용 실패 (requestedId 없음)"
+
+        # 4단계: 아이템 적용 상태 확인
+        response4 = self.api_client.get_instant_coupon_status(self.vendor_id, req_id2)
+        content4 = response4.get('data', {}).get('content', {})
+        status4 = content4.get('status')
+
+        if status4 != 'DONE':
+            failed_items = content4.get('failedVendorItems', [])
+            error_details = ', '.join([f"{item.get('vendorItemId')}: {item.get('reason')}" for item in failed_items])
+            raise AssertionError(f"즉시할인쿠폰 아이템 적용 실패 (status={status4}, 실패: {error_details})")
+
+        return f"즉시할인쿠폰 생성 완료 (couponId: {coupon_id}, 옵션 {len(vendor_items)}개 적용)"
+
+    def _issue_download_coupon(
+        self,
+        coupon_name: str,
+        discount_type: str,
+        discount: int,
+        issue_count: Optional[int],
+        start_date: str,
+        end_date: str,
+        vendor_items: List[int],
+        validity_days: int
+    ) -> str:
+        """
+        다운로드쿠폰 발급 (동기 API)
+
+        Args:
+            coupon_name: 쿠폰 이름
+            discount_type: 할인 방식 (RATE/FIXED_WITH_QUANTITY/PRICE)
+            discount: 할인금액/비율
+            issue_count: 발급개수 (일일 최대)
+            start_date: 유효 시작일
+            end_date: 유효 종료일
+            vendor_items: 옵션ID 리스트
+            validity_days: 유효기간 (일)
+
+        Returns:
+            성공 메시지 문자열
+
+        Raises:
+            AssertionError: API 호출 실패 시
+        """
+        assert self.user_id is not None, "user_id가 설정되지 않았습니다"
+        assert issue_count is not None, "발급개수가 설정되지 않았습니다"
+
+        # 다운로드쿠폰 정책 구성
+        policy = {
+            "title": coupon_name,
+            "typeOfDiscount": discount_type,
+            "description": f"{coupon_name} ({validity_days}일간 유효)",
+            "discount": discount,
+            "maximumDiscountPrice": COUPON_MAX_DISCOUNT,
+            "maximumPerDaily": issue_count
+        }
+
+        # 1단계: 쿠폰 생성 (동기 API - 바로 couponId 반환)
+        response1 = self.api_client.create_download_coupon(
+            contract_id=COUPON_CONTRACT_ID,
+            title=coupon_name,
+            start_date=start_date,
+            end_date=end_date,
+            user_id=self.user_id,
+            policies=[policy]
+        )
+
+        coupon_id = response1.get('couponId')
+        assert coupon_id is not None, f"다운로드쿠폰 생성 실패 (couponId 없음): {response1}"
+
+        # 2단계: 아이템 적용 (동기 API)
+        response2 = self.api_client.apply_download_coupon(
+            coupon_id=coupon_id,
+            user_id=self.user_id,
+            vendor_items=vendor_items
+        )
+
+        result_status = response2.get('requestResultStatus')
+        if result_status != 'SUCCESS':
+            error_msg = response2.get('errorMessage', 'Unknown error')
+            raise AssertionError(f"다운로드쿠폰 아이템 적용 실패: {error_msg}")
+
+        return f"다운로드쿠폰 생성 완료 (couponId: {coupon_id}, 옵션 {len(vendor_items)}개 적용)"
+
     def _fetch_coupons_from_excel(self) -> List[Dict[str, Any]]:
         """
         엑셀 파일에서 쿠폰 정의 읽기
 
-        엑셀 컬럼 (6개):
+        엑셀 컬럼 (7개):
         1. 쿠폰이름
         2. 쿠폰타입 (즉시할인 또는 다운로드쿠폰)
         3. 쿠폰유효기간 (일 단위, 예: 2)
         4. 할인방식 (RATE/FIXED_WITH_QUANTITY/PRICE)
         5. 할인금액/비율 (discount value, 할인방식에 따라 의미 다름)
         6. 발급개수 (다운로드쿠폰 전용, 비어있으면 기본값 사용)
+        7. 옵션ID (쉼표로 구분된 vendor item ID 리스트, 필수)
 
         Returns:
             쿠폰 정의 리스트
@@ -244,9 +377,12 @@ class CouponIssuer:
             headers = [cell.value for cell in sheet[1]]  # type: ignore
 
             # 필수 컬럼 체크
-            required_columns = ['쿠폰이름', '쿠폰타입', '쿠폰유효기간', '할인방식', '할인금액/비율', '발급개수']
+            required_columns = ['쿠폰이름', '쿠폰타입', '쿠폰유효기간', '할인방식', '할인금액/비율', '발급개수', '옵션ID']
 
             for col in required_columns:
+                # 옵션ID는 "옵션 ID" (공백 포함)도 허용 (ADR 002 입력 정규화)
+                if col == '옵션ID' and '옵션 ID' in headers:
+                    continue
                 if col not in headers:
                     raise ValueError(f"필수 컬럼이 없습니다: {col}")
 
@@ -257,8 +393,10 @@ class CouponIssuer:
                 if not any(row):
                     continue
 
-                # 컬럼 인덱스 매핑
+                # 컬럼 인덱스 매핑 (옵션ID는 "옵션 ID"도 허용)
                 col_indices = {header: idx for idx, header in enumerate(headers)}
+                if '옵션ID' not in col_indices and '옵션 ID' in col_indices:
+                    col_indices['옵션ID'] = col_indices['옵션 ID']
 
                 # 1. 쿠폰이름: strip만 적용
                 coupon_name = str(row[col_indices['쿠폰이름']]).strip()
@@ -350,13 +488,44 @@ class CouponIssuer:
                     if discount < 1:
                         raise ValueError(f"행 {row_idx}: FIXED_WITH_QUANTITY 할인은 1 이상이어야 합니다 (현재: {discount})")
 
+                # 8. 옵션ID (Column G): 쉼표로 구분된 vendor item ID 리스트 (필수)
+                vendor_items_raw = str(row[col_indices['옵션ID']]).strip()
+
+                if not vendor_items_raw or vendor_items_raw == 'None':
+                    raise ValueError(f"행 {row_idx}: 옵션ID는 필수 입력입니다")
+
+                # 쉼표로 분리 + strip + int 변환
+                try:
+                    vendor_items = [
+                        int(item.strip())
+                        for item in vendor_items_raw.split(',')
+                        if item.strip()
+                    ]
+                except (ValueError, TypeError):
+                    raise ValueError(f"행 {row_idx}: 옵션ID는 숫자만 입력 가능합니다 (현재값: {vendor_items_raw})")
+
+                if not vendor_items:
+                    raise ValueError(f"행 {row_idx}: 옵션ID가 비어있습니다")
+
+                # Coupang API 제한 검증
+                if coupon_type == '즉시할인' and len(vendor_items) > 10000:
+                    raise ValueError(f"행 {row_idx}: 즉시할인쿠폰은 최대 10,000개의 옵션ID만 지원합니다 (현재: {len(vendor_items)}개)")
+                elif coupon_type == '다운로드쿠폰' and len(vendor_items) > 100:
+                    raise ValueError(f"행 {row_idx}: 다운로드쿠폰은 최대 100개의 옵션ID만 지원합니다 (현재: {len(vendor_items)}개)")
+
+                # 양의 정수 검증
+                for vid in vendor_items:
+                    if vid <= 0:
+                        raise ValueError(f"행 {row_idx}: 옵션ID는 양의 정수여야 합니다 (현재: {vid})")
+
                 coupon = {
                     'name': coupon_name,
                     'type': coupon_type,
                     'validity_days': validity_days,
                     'discount_type': discount_type,
-                    'discount': discount,  # NEW: from column E
-                    'issue_count': issue_count,  # From column F (None for instant coupons)
+                    'discount': discount,  # Column E: 할인금액/비율
+                    'issue_count': issue_count,  # Column F: 발급개수 (None for instant coupons)
+                    'vendor_items': vendor_items,  # Column G: 옵션ID 리스트
                 }
 
                 coupons.append(coupon)
