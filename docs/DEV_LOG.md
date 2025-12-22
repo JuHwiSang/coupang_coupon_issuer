@@ -48,6 +48,27 @@
 
 ---
 
+## 2024-12-22
+
+### install 명령어 대화형 입력
+- **동작**: `--access-key`, `--secret-key`, `--user-id`, `--vendor-id` 옵션 미지정 시 `input()`으로 대화형 입력받음
+- **목적**: 명령줄 히스토리에 인증 정보 노출 방지
+- **제한사항**:
+  - Non-interactive 환경 (파이프, 백그라운드 실행)에서는 빈 입력으로 성공할 수 있음
+  - 완전 자동화 환경에서는 4개 옵션 모두 명시 권장
+- **예시**:
+  ```bash
+  # 대화형 (권장)
+  python3 main.py install ~/my-coupons
+
+  # 스크립트/자동화 (4개 옵션 필수)
+  python3 main.py install ~/my-coupons \
+    --access-key KEY --secret-key SECRET \
+    --user-id USER --vendor-id VENDOR
+  ```
+
+---
+
 ## 2024-12-17
 
 ### CLI 명령어 구조 (ADR 008)

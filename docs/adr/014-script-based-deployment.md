@@ -169,6 +169,22 @@ UUID 기반 cron 작업 추적은 여전히 동일하게 작동:
 - **이유**: 엑셀 파일명을 `coupons.xlsx`로 고정하여 사용자 경험 단순화
 - **영향**: CLI에서 파일 경로 지정 불가, 항상 작업 디렉토리 내 `coupons.xlsx` 사용
 
+### 2024-12-22: uninstall 시 config.json 자동 삭제
+- **변경**: `CrontabService.uninstall()`이 `ConfigManager.remove(base_dir)` 호출하여 config.json 삭제
+- **이유**: 서비스 제거 시 인증 정보도 함께 삭제하여 보안 강화 및 깔끔한 정리
+- **영향**: uninstall 후 config.json이 제거됨 (이전에는 보존됨)
+- **관련**: 통합 테스트 `test_uninstall_preserves_config_json` → `test_uninstall_removes_config_json`으로 변경
+
+### 2024-12-22: install 대화형 입력 지원
+- **변경**: install 명령어에서 `--access-key`, `--secret-key`, `--user-id`, `--vendor-id` 옵션 미지정 시 대화형 입력(`input()`)으로 받음
+- **이유**: 명령줄에 인증 정보 노출 방지, 사용자 편의성 향상
+- **영향**:
+  - 옵션 없이 실행 시 대화형으로 입력받음
+  - Non-interactive 환경에서도 빈 입력으로 성공 가능 (제한사항)
+- **관련**:
+  - 통합 테스트 `test_install_requires_all_4_parameters` 제거 (대화형 입력 테스트 불가)
+  - DEV_LOG.md에 사용 가이드 추가
+
 ## 참조
 
 - ADR 013: PyInstaller 단일 실행 파일 (대체됨)

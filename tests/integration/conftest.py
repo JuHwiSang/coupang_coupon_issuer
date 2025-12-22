@@ -1,11 +1,11 @@
 """
-Integration test fixtures using Docker + PyInstaller.
+Integration test fixtures using Docker + Python scripts.
 
-Provides fixtures for building and testing PyInstaller binaries in Docker containers.
-Tests verify the single-binary deployment model with UUID-based cron tracking.
+Provides fixtures for testing Python scripts in Docker containers.
+Tests verify the script-based deployment model with UUID-based cron tracking.
 
 Key features:
-- PyInstaller build inside Docker
+- Direct Python script execution (no PyInstaller)
 - Multi-distro testing via pytest parametrize
 - Pre-built images for faster test execution
 - PEP 668 compatibility (--break-system-packages for newer distros)
@@ -21,7 +21,7 @@ from testcontainers.core.container import DockerContainer
 
 def get_or_build_image(base_image):
     """
-    Get or build a Docker image with PyInstaller and cron pre-installed.
+    Get or build a Docker image with Python dependencies and cron pre-installed.
 
     This function checks if a pre-built test image exists. If not, it builds one
     with all necessary system packages and Python dependencies installed.
@@ -38,7 +38,7 @@ def get_or_build_image(base_image):
         str: Tag of the built/existing image
     """
     client = docker.from_env()
-    tag = f"coupang-coupon-issuer-pyinstaller-test:{base_image.replace(':', '-')}"
+    tag = f"coupang-coupon-issuer-test:{base_image.replace(':', '-')}"
 
     try:
         # Check if image already exists
@@ -53,10 +53,10 @@ def get_or_build_image(base_image):
         # PEP 668 (Externally Managed Environment) requires --break-system-packages
         # Ubuntu 24.04, Debian 13, and Debian 12 all require the flag
         if base_image in ["ubuntu:24.04", "debian:13", "debian:12"]:
-            pip_cmd = "python3 -m pip install --break-system-packages pyinstaller requests openpyxl"
+            pip_cmd = "python3 -m pip install --break-system-packages requests openpyxl"
         else:
             # Ubuntu 22.04 doesn't need the flag
-            pip_cmd = "python3 -m pip install pyinstaller requests openpyxl"
+            pip_cmd = "python3 -m pip install requests openpyxl"
 
         dockerfile_content = f"""FROM {base_image}
 
@@ -71,11 +71,14 @@ RUN apt-get update && \\
     jq && \\
     rm -rf /var/lib/apt/lists/*
 
-# Install PyInstaller and dependencies
+# Install Python dependencies
 RUN {pip_cmd}
 
 # Set working directory (project code will be mounted here)
 WORKDIR /app
+
+# Set PYTHONPATH to include /app/src for module imports
+ENV PYTHONPATH=/app/src:$PYTHONPATH
 
 # Start cron in foreground (systemd not available in Docker)
 CMD ["bash", "-c", "cron -f"]
@@ -115,7 +118,7 @@ def test_image(request):
 @pytest.fixture
 def test_container(test_image):
     """
-    Create Docker container with PyInstaller and cron.
+    Create Docker container with Python and cron.
 
     Returns:
         DockerContainer: Running container
@@ -123,11 +126,10 @@ def test_container(test_image):
     project_root = Path(__file__).parent.parent.parent
 
     container = DockerContainer(test_image)
-    # container.with_command("/bin/bash")
     container.with_kwargs(stdin_open=True, tty=True)
 
     # Mount project code as READ-ONLY to /mnt/src
-    # Then copy to /app for building (security best practice)
+    # Then copy to /app for execution (security best practice)
     container.with_volume_mapping(
         str(project_root.resolve()),
         "/mnt/src",
@@ -142,7 +144,7 @@ def test_container(test_image):
     print("Copying source code to /app...", flush=True)
     container.exec(["bash", "-c", "cp -r /mnt/src/* /app/"])
 
-    # Note: cron is already running via CMD (cron && tail -f /var/log/cron.log)
+    # Note: cron is already running via CMD (cron -f)
     print("Container ready (cron running in foreground)", flush=True)
 
     yield container
@@ -152,33 +154,19 @@ def test_container(test_image):
 
 
 @pytest.fixture
-def built_binary(test_container):
+def python_script(test_container):
     """
-    Build PyInstaller binary inside container.
+    Get path to Python script inside container.
 
     Returns:
-        str: Path to built binary inside container
+        str: Path to main.py inside container
     """
-    print("Building PyInstaller binary...", flush=True)
-
-    # Build with PyInstaller (add --paths to include src directory)
-    exit_code, output = test_container.exec([
-        "bash", "-c",
-        "cd /app/src && pyinstaller --onefile --name coupang_coupon_issuer "
-        "--paths /app/src ../main.py" # --paths 없으면 coupang_coupon_issuer 모듈을 못 찾음
-    ])
-
+    # Verify main.py exists
+    exit_code, _ = test_container.exec(["test", "-f", "/app/main.py"])
     if exit_code != 0:
-        output_str = output.decode('utf-8') if output else ""
-        pytest.fail(f"PyInstaller build failed: {output_str}")
+        pytest.fail("main.py not found in /app")
 
-    # Verify binary exists
-    exit_code, _ = test_container.exec(["test", "-f", "/app/src/dist/coupang_coupon_issuer"])
-    if exit_code != 0:
-        pytest.fail("Binary not found after build")
-
-    print("Binary built successfully", flush=True)
-    return "/app/src/dist/coupang_coupon_issuer"
+    return "/app/main.py"
 
 
 @pytest.fixture
@@ -252,10 +240,10 @@ import openpyxl
 wb = openpyxl.Workbook()
 ws = wb.active
 
-ws.append(['쿠폰이름', '쿠폰타입', '쿠폰유효기간', '할인방식', '할인금액/비율', '발급개수'])
-ws.append(['테스트쿠폰1', '즉시할인', 30, 'RATE', 10, ''])
-ws.append(['테스트쿠폰2', '다운로드쿠폰', 15, 'PRICE', 500, 100])
-ws.append(['테스트쿠폰3', '다운로드쿠폰', 30, 'FIXED_WITH_QUANTITY', 1000, 50])
+ws.append(['쿠폰이름', '쿠폰타입', '쿠폰유효기간', '할인방식', '할인금액/비율', '발급개수', '옵션ID'])
+ws.append(['테스트쿠폰1', '즉시할인', 30, 'RATE', 10, '', '3226138951, 3226138847'])
+ws.append(['테스트쿠폰2', '다운로드쿠폰', 15, 'PRICE', 500, 100, '2306264997, 4802314648'])
+ws.append(['테스트쿠폰3', '다운로드쿠폰', 30, 'FIXED_WITH_QUANTITY', 1000, 50, '4230264914'])
 
 wb.save('{excel_path}')
 """
