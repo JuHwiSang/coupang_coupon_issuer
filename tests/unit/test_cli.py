@@ -167,7 +167,10 @@ class TestIssueCommand:
 
     def test_issue_loads_credentials_from_file(self, tmp_path, mocker):
         """Issue command should load credentials from file"""
-        mock_load_env = mocker.patch('main.ConfigManager.load_credentials_to_env')
+        mock_load_creds = mocker.patch(
+            'main.ConfigManager.load_credentials',
+            return_value=("access", "secret", "user", "vendor")
+        )
         mock_issuer_class = mocker.patch('main.CouponIssuer')
         mock_issuer = MagicMock()
         mock_issuer_class.return_value = mock_issuer
@@ -179,15 +182,21 @@ class TestIssueCommand:
         main.cmd_issue(args)
 
         # Verify credentials were loaded
-        mock_load_env.assert_called_once()
+        mock_load_creds.assert_called_once()
 
-        # Verify issuer was instantiated and issue() called
-        mock_issuer_class.assert_called_once()
+        # Verify issuer was instantiated with credentials
+        mock_issuer_class.assert_called_once_with(
+            base_dir=tmp_path,
+            access_key="access",
+            secret_key="secret",
+            user_id="user",
+            vendor_id="vendor"
+        )
         mock_issuer.issue.assert_called_once()
 
     def test_issue_handles_credential_error(self, tmp_path, mocker, capsys):
         """Issue should exit if credentials can't be loaded"""
-        mocker.patch('main.ConfigManager.load_credentials_to_env', side_effect=FileNotFoundError("No file"))
+        mocker.patch('main.ConfigManager.load_credentials', side_effect=FileNotFoundError("No file"))
 
         args = MagicMock()
         args.jitter_max = None
@@ -201,7 +210,10 @@ class TestIssueCommand:
 
     def test_issue_handles_issuer_error(self, tmp_path, mocker, capsys):
         """Issue should exit if issuer.issue() fails"""
-        mocker.patch('main.ConfigManager.load_credentials_to_env')
+        mocker.patch(
+            'main.ConfigManager.load_credentials',
+            return_value=("access", "secret", "user", "vendor")
+        )
         mock_issuer_class = mocker.patch('main.CouponIssuer')
         mock_issuer = MagicMock()
         mock_issuer.issue.side_effect = Exception("Issuer failed")
@@ -219,7 +231,10 @@ class TestIssueCommand:
 
     def test_issue_with_jitter(self, tmp_path, mocker):
         """Issue command should handle jitter parameter"""
-        mock_load_env = mocker.patch('main.ConfigManager.load_credentials_to_env')
+        mocker.patch(
+            'main.ConfigManager.load_credentials',
+            return_value=("access", "secret", "user", "vendor")
+        )
         mock_issuer_class = mocker.patch('main.CouponIssuer')
         mock_issuer = MagicMock()
         mock_issuer_class.return_value = mock_issuer

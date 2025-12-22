@@ -67,6 +67,21 @@
     --user-id USER --vendor-id VENDOR
   ```
 
+### 인증 정보 전달 방식 명확화
+- **문제**: issuer.py의 `__init__`에서 `or os.environ.get()` 패턴 사용 - 불명확한 fallback 동작
+- **해결**: 환경 변수 fallback 완전 제거, 모든 인증 정보는 명시적으로 전달
+- **변경 사항**:
+  1. **issuer.py**: 환경 변수 fallback 제거, 모든 파라미터 필수
+     - `access_key: Optional[str] = None` (필수 검증)
+     - `or os.environ.get()` 패턴 삭제
+     - `import os` 제거
+  2. **main.py**: config.json 로드 후 직접 전달
+     - `ConfigManager.load_credentials(base_dir)` 호출
+     - `CouponIssuer(base_dir, access_key, secret_key, user_id, vendor_id)` 생성
+     - ~~환경 변수 주입 (`load_credentials_to_env()`) 제거~~
+- **이유**: 명시적 전달이 더 명확하고 추적 가능함, 환경 변수는 불필요한 간접성 추가
+- **참조**: config.py의 `load_credentials_to_env()` 메서드는 레거시로 남아있지만 사용하지 않음
+
 ---
 
 ## 2024-12-17

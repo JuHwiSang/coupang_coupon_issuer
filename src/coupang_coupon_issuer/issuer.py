@@ -1,6 +1,5 @@
 """쿠폰 발급 로직 모듈"""
 
-import os
 import re
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -32,24 +31,25 @@ class CouponIssuer:
         """
         Args:
             base_dir: 작업 디렉토리 (None이면 현재 디렉토리)
-            access_key: Coupang Access Key (None이면 환경변수에서 가져옴)
-            secret_key: Coupang Secret Key (None이면 환경변수에서 가져옴)
-            user_id: WING 사용자 ID (None이면 환경변수에서 가져옴)
-            vendor_id: 판매자 ID (None이면 환경변수에서 가져옴)
+            access_key: Coupang Access Key (필수)
+            secret_key: Coupang Secret Key (필수)
+            user_id: WING 사용자 ID (필수)
+            vendor_id: 판매자 ID (필수)
         """
         self.base_dir = get_base_dir(base_dir)
         self.excel_file = get_excel_file(self.base_dir)
 
-        self.access_key = access_key or os.environ.get("COUPANG_ACCESS_KEY")
-        self.secret_key = secret_key or os.environ.get("COUPANG_SECRET_KEY")
-        self.user_id = user_id or os.environ.get("COUPANG_USER_ID")
-        self.vendor_id = vendor_id or os.environ.get("COUPANG_VENDOR_ID")
-
-        if not self.access_key or not self.secret_key:
+        # 모든 인증 정보 필수
+        if not access_key or not secret_key:
             raise ValueError("API 키가 설정되지 않았습니다.")
 
-        if not self.user_id or not self.vendor_id:
+        if not user_id or not vendor_id:
             raise ValueError("쿠폰 정보가 설정되지 않았습니다 (user_id, vendor_id).")
+
+        self.access_key = access_key
+        self.secret_key = secret_key
+        self.user_id = user_id
+        self.vendor_id = vendor_id
 
         # Coupang API 클라이언트 초기화
         self.api_client = CoupangAPIClient(self.access_key, self.secret_key)

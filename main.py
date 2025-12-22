@@ -174,14 +174,20 @@ def cmd_issue(args) -> None:
 
     # config.json에서 API 키 로드
     try:
-        ConfigManager.load_credentials_to_env(base_dir)
+        access_key, secret_key, user_id, vendor_id = ConfigManager.load_credentials(base_dir)
     except Exception as e:
         print(f"ERROR: API 키 로드 실패: {e}", flush=True)
         sys.exit(1)
 
     # 쿠폰 발급 실행
     try:
-        issuer = CouponIssuer(base_dir)
+        issuer = CouponIssuer(
+            base_dir=base_dir,
+            access_key=access_key,
+            secret_key=secret_key,
+            user_id=user_id,
+            vendor_id=vendor_id
+        )
         issuer.issue()
     except Exception as e:
         print(f"ERROR: 쿠폰 발급 실패: {e}", flush=True)

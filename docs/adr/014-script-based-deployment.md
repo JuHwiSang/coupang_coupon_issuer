@@ -185,6 +185,18 @@ UUID 기반 cron 작업 추적은 여전히 동일하게 작동:
   - 통합 테스트 `test_install_requires_all_4_parameters` 제거 (대화형 입력 테스트 불가)
   - DEV_LOG.md에 사용 가이드 추가
 
+### 2024-12-22: 인증 정보 전달 방식 명확화
+- **변경**: 환경 변수 fallback 패턴 제거, 명시적 파라미터 전달만 사용
+- **이유**:
+  - `issuer.py`의 `or os.environ.get()` 패턴은 불명확한 fallback 동작
+  - `main.py`에서 config 로드 후 환경 변수 주입(`load_credentials_to_env()`)은 불필요한 간접성
+  - 명시적 전달이 더 명확하고 추적 가능
+- **변경 사항**:
+  1. `issuer.py`: 모든 인증 파라미터 필수 검증, 환경 변수 fallback 제거
+  2. `main.py`: `load_credentials()` 호출 후 직접 전달
+  3. `import os` 제거 (issuer.py)
+- **영향**: 환경 변수 기반 인증 정보 주입 방식 완전 제거
+
 ## 참조
 
 - ADR 013: PyInstaller 단일 실행 파일 (대체됨)
