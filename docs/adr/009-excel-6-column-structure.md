@@ -67,7 +67,7 @@ ADR 001에서 정의한 5컬럼 구조에서 '발급개수' 컬럼이 **두 가�
 
 ### 파일 위치
 
-- **입력 파일**: `/etc/coupang_coupon_issuer/coupons.xlsx`
+- **입력 파일**: `coupons.xlsx` (작업 디렉토리 내, 파일명 고정)
 - **설정 파일**: `src/coupang_coupon_issuer/config.py`
   - `COUPON_DEFAULT_ISSUE_COUNT = 1` 추가
 
@@ -207,9 +207,17 @@ policy = {
 - **불필요**: 이 프로젝트는 아직 배포되지 않음
 - 기존 사용자 없음
 
+## 변경 이력
+
+### 2024-12-22: 파일명 고정
+- **변경**: 입력 파일 위치를 `/etc/coupang_coupon_issuer/coupons.xlsx` → `coupons.xlsx` (작업 디렉토리 내, 파일명 고정)으로 변경
+- **이유**: ADR 014 스크립트 기반 배포 전략에 따라 작업 디렉토리 개념 도입, 파일명 `coupons.xlsx` 고정
+- **영향**: `verify` 명령어에서 파일 인자 제거, 항상 `coupons.xlsx` 사용
+
 ## 참조
 
 - [ADR 001: 엑셀 입력 구조](001-excel-structure.md) (Superseded)
 - [ADR 002: 입력 정규화](002-input-normalization.md) (여전히 유효)
 - [ADR 003: API 인증](003-api-authentication.md)
 - [ADR 007: 쿠폰 발급 워크플로우](007-coupon-issuance-workflow.md)
+- [ADR 014: 스크립트 기반 배포](014-script-based-deployment.md) (현재 구조)

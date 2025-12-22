@@ -174,11 +174,11 @@ tests/
 Python 스크립트 형태로 실행:
 
 ```bash
-# 1. 엑셀 파일 검증 및 미리보기 (테이블 형식)
-python3 main.py verify [디렉토리] [./coupons.xlsx]
+# 1. 엑셀 파일 검증 및 미리보기 (테이블 형식, coupons.xlsx 고정)
+python3 main.py verify [디렉토리]
 # 예시:
-python3 main.py verify .              # 현재 디렉토리
-python3 main.py verify ~/my-coupons   # 특정 디렉토리
+python3 main.py verify .              # 현재 디렉토리의 coupons.xlsx
+python3 main.py verify ~/my-coupons   # ~/my-coupons/coupons.xlsx
 # → 9개 컬럼 (쿠폰이름, 쿠폰타입, 유효기간, 할인방식, 할인금액, 할인비율, 발급개수, 총 예산) 출력
 
 # 2. 단발성 쿠폰 발급 (테스트용)

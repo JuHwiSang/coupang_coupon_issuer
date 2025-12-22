@@ -30,7 +30,7 @@ ADR 013은 배포 단순화를 위해 PyInstaller 기반 단일 실행 파일 �
 # 이후 (Python 스크립트)
 python3 main.py install . --access-key KEY ...
 python3 main.py issue .
-python3 main.py verify .
+python3 main.py verify .    # coupons.xlsx 파일명 고정
 python3 main.py uninstall .
 ```
 
@@ -94,7 +94,7 @@ def get_config_file(base_dir: Path) -> Path:
 
 **CLI** (`main.py`):
 - 모든 서브명령어가 디렉토리 인자를 받음 (위치 인자, install을 제외하고 선택적)
-- `verify [directory] [file]`
+- `verify [directory]` - 엑셀 파일명은 `coupons.xlsx`로 고정
 - `issue [directory] [--jitter-max N]`
 - `install directory --access-key ... `
 - `uninstall [directory]`
@@ -162,8 +162,16 @@ UUID 기반 cron 작업 추적은 여전히 동일하게 작동:
 2. **패키지 설치만 사용**: 사용자가 `pip install` 실행 필요, 양쪽 모두 허용하는 것보다 유연성 떨어짐
 3. **Docker 기반 배포**: 단순한 cron 작업에는 과도함
 
+## 변경 이력
+
+### 2024-12-22: 엑셀 파일명 고정
+- **변경**: `verify [directory] [file]` → `verify [directory]` (파일 인자 제거)
+- **이유**: 엑셀 파일명을 `coupons.xlsx`로 고정하여 사용자 경험 단순화
+- **영향**: CLI에서 파일 경로 지정 불가, 항상 작업 디렉토리 내 `coupons.xlsx` 사용
+
 ## 참조
 
 - ADR 013: PyInstaller 단일 실행 파일 (대체됨)
+- ADR 009: 엑셀 6컬럼 구조 (파일명 고정 관련)
 - 이슈: 느린 통합 테스트 (6-7분)
 - 목표: PyInstaller(선택적)와 스크립트 실행 모두 지원

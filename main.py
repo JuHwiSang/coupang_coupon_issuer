@@ -3,10 +3,10 @@
 Coupang Coupon Issuer - 매일 0시에 쿠폰을 발급하는 서비스
 
 사용법:
-    ./coupang_coupon_issuer verify [./coupons.xlsx]
-    ./coupang_coupon_issuer issue [--jitter-max 60]
-    ./coupang_coupon_issuer install --access-key KEY --secret-key SECRET ...
-    ./coupang_coupon_issuer uninstall
+    ./coupang_coupon_issuer verify [디렉토리]
+    ./coupang_coupon_issuer issue [디렉토리] [--jitter-max 60]
+    ./coupang_coupon_issuer install [디렉토리] --access-key KEY --secret-key SECRET ...
+    ./coupang_coupon_issuer uninstall [디렉토리]
 """
 
 import sys
@@ -27,7 +27,7 @@ def cmd_verify(args) -> None:
     from openpyxl import load_workbook
 
     base_dir = Path(args.directory).resolve() if args.directory else Path.cwd()
-    excel_path = Path(args.file) if args.file else get_excel_file(base_dir)
+    excel_path = get_excel_file(base_dir)  # 항상 coupons.xlsx 사용
 
     if not excel_path.exists():
         print(f"ERROR: {excel_path} 파일을 찾을 수 없습니다", flush=True)
@@ -243,14 +243,14 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 사용 예시:
-  # 1. 엑셀 파일 검증 (테이블 형식 출력)
-  ./coupang_coupon_issuer verify [./coupons.xlsx]
+  # 1. 엑셀 파일 검증 (coupons.xlsx 고정)
+  ./coupang_coupon_issuer verify [디렉토리]
 
   # 2. 단발성 쿠폰 발급 (테스트용)
-  ./coupang_coupon_issuer issue [--jitter-max 60]
+  ./coupang_coupon_issuer issue [디렉토리] [--jitter-max 60]
 
   # 3. 서비스 설치 (4개 파라미터 필수)
-  ./coupang_coupon_issuer install \\
+  ./coupang_coupon_issuer install [디렉토리] \\
     --access-key YOUR_KEY \\
     --secret-key YOUR_SECRET \\
     --user-id YOUR_USER_ID \\
@@ -258,29 +258,23 @@ def main() -> None:
     [--jitter-max 60]
 
   # 4. 서비스 제거
-  ./coupang_coupon_issuer uninstall
+  ./coupang_coupon_issuer uninstall [디렉토리]
 
 서비스 관리:
   crontab -l                    # 스케줄 확인
-  tail -f ./issuer.log          # 로그 확인
+  tail -f [디렉토리]/issuer.log # 로그 확인
         """
     )
 
     subparsers = parser.add_subparsers(dest="command", help="명령어")
 
     # verify 서브파서 (apply 대체)
-    verify_parser = subparsers.add_parser("verify", help="엑셀 파일 검증 및 미리보기")
+    verify_parser = subparsers.add_parser("verify", help="엑셀 파일 검증 및 미리보기 (coupons.xlsx)")
     verify_parser.add_argument(
         "directory",
         nargs="?",
         default=None,
         help="작업 디렉토리 (기본: 현재 디렉토리)"
-    )
-    verify_parser.add_argument(
-        "file",
-        nargs="?",
-        type=str,
-        help="엑셀 파일 경로 (기본: ./coupons.xlsx)"
     )
 
     # issue 서브파서

@@ -1,21 +1,23 @@
 # Coupang Coupon Issuer
 
-PyInstaller 단일 실행 파일로 배포하는 쿠폰 자동 발급 서비스
+Python 스크립트 기반 쿠폰 자동 발급 서비스
 
 ## 특징
 
-- **단일 실행 파일**: Python 설치 불필요 (PyInstaller --onefile)
-- **간단한 구조**: 실행 파일 + 설정 + 로그 모두 한 디렉토리
+- **Python 스크립트 실행**: 간단한 설치 및 실행
+- **간단한 구조**: 소스코드와 작업 디렉토리 분리
 - **UUID 기반 추적**: 디렉토리 이동 시 재설치 자동 처리
 - **Cron 스케줄링**: 매일 0시 자동 실행
 - **Jitter 지원**: Thundering herd 방지 (0-120분 랜덤 지연)
 - **자동 Cron 설치**: Ubuntu/Debian 자동 감지 및 설치
+- **고정 파일명**: 엑셀 파일명은 `coupons.xlsx`로 고정
 
 ## 시스템 요구사항
 
-### 배포 환경 (PyInstaller 빌드 결과)
+### 배포 환경
 - Linux OS (cron 지원)
-- Python 불필요 (실행 파일에 포함)
+- Python 3.10+ 필수
+- 의존성: requests, openpyxl
 
 ### 개발 환경
 - Python 3.10+
@@ -24,44 +26,51 @@ PyInstaller 단일 실행 파일로 배포하는 쿠폰 자동 발급 서비스
 
 ### 지원 배포판
 
-- **Ubuntu**: 22.04 (Jammy) 이상
-- **Debian**: 12 (Bookworm) 이상
+Python 3.10+ 요구사항으로 인해:
+- **Ubuntu**: 22.04 (Jammy, Python 3.10) 이상
+- **Debian**: 12 (Bookworm, Python 3.11) 이상
 
 ## 설치 및 사용
 
-### 1. 다운로드 (GitHub Release)
+### 1. 프로젝트 클론 및 의존성 설치
 
 ```bash
-# 실행 파일 다운로드
-wget https://github.com/.../coupang_coupon_issuer
-chmod +x coupang_coupon_issuer
+# 프로젝트 클론
+git clone <repository-url>
+cd coupang_coupon_issuer
 
-# 디렉토리 생성 및 이동
-mkdir -p ~/coupang_coupon_issuer
-mv coupang_coupon_issuer ~/coupang_coupon_issuer/
-cd ~/coupang_coupon_issuer
+# 의존성 설치
+pip3 install -e .
+# 또는
+pip3 install requests openpyxl
 ```
 
-### 2. 엑셀 파일 배치
+### 2. 작업 디렉토리 생성 및 엑셀 파일 배치
 
 ```bash
-# coupons.xlsx 파일을 같은 디렉토리에 복사
-cp /path/to/coupons.xlsx ./
+# 작업 디렉토리 생성
+mkdir -p ~/my-coupons
+
+# coupons.xlsx 파일을 작업 디렉토리에 복사
+cp /path/to/coupons.xlsx ~/my-coupons/
 ```
 
-**엑셀 파일 형식** (6개 컬럼):
+**엑셀 파일 형식** (7개 컬럼):
 1. 쿠폰이름
 2. 쿠폰타입 (즉시할인 / 다운로드쿠폰)
 3. 쿠폰유효기간 (일 단위, 예: 30)
 4. 할인방식 (RATE / PRICE / FIXED_WITH_QTY)
 5. 할인금액/비율 (예: 10 = 10% 또는 1000 = 1000원)
 6. 발급개수 (즉시할인은 빈값, 다운로드쿠폰은 숫자)
+7. 옵션ID (쉼표로 구분된 vendor item ID, 예: 123,456,789)
+
+**중요**: 엑셀 파일명은 반드시 `coupons.xlsx`여야 합니다.
 
 ### 3. 엑셀 검증
 
 ```bash
 # 엑셀 파일 검증 및 전체 내용 확인 (테이블 형식)
-./coupang_coupon_issuer verify
+python3 main.py verify ~/my-coupons
 ```
 
 **출력 예시**:
@@ -82,15 +91,18 @@ cp /path/to/coupons.xlsx ./
 ### 4. 서비스 설치 (Cron 등록)
 
 ```bash
-# 기본 설치
-./coupang_coupon_issuer install \
+# 기본 설치 (대화형 입력)
+python3 main.py install ~/my-coupons
+
+# 옵션으로 인증 정보 제공 (대화형 입력 생략)
+python3 main.py install ~/my-coupons \
   --access-key YOUR_ACCESS_KEY \
   --secret-key YOUR_SECRET_KEY \
   --user-id YOUR_USER_ID \
   --vendor-id YOUR_VENDOR_ID
 
 # Jitter 활성화 (0-60분 랜덤 지연)
-./coupang_coupon_issuer install \
+python3 main.py install ~/my-coupons \
   --access-key YOUR_ACCESS_KEY \
   --secret-key YOUR_SECRET_KEY \
   --user-id YOUR_USER_ID \
@@ -110,53 +122,60 @@ cp /path/to/coupons.xlsx ./
 crontab -l
 
 # 로그 확인 (실시간)
-tail -f ./issuer.log
+tail -f ~/my-coupons/issuer.log
 
 # 로그 확인 (에러만)
-cat ./issuer.log | grep ERROR
+cat ~/my-coupons/issuer.log | grep ERROR
 
 # 단발성 테스트 실행
-./coupang_coupon_issuer issue
+python3 main.py issue ~/my-coupons
 
 # 단발성 테스트 (Jitter 포함)
-./coupang_coupon_issuer issue --jitter-max 30
+python3 main.py issue ~/my-coupons --jitter-max 30
 ```
 
 ### 6. 서비스 제거
 
 ```bash
-# Cron job만 제거 (파일은 유지)
-./coupang_coupon_issuer uninstall
+# Cron job 및 config.json 제거 (엑셀 파일과 로그는 유지)
+python3 main.py uninstall ~/my-coupons
 
 # 완전 삭제
-rm -rf ~/coupang_coupon_issuer
+rm -rf ~/my-coupons
 ```
 
 ## 디렉토리 이동
 
-디렉토리를 이동한 후 재설치하면 UUID 기반으로 이전 cron job을 자동 제거합니다:
+작업 디렉토리를 이동한 후 재설치하면 UUID 기반으로 이전 cron job을 자동 제거합니다:
 
 ```bash
 # 1. 새 위치로 이동
-mv ~/coupang_coupon_issuer ~/new_location/
+mv ~/my-coupons ~/new-location/
 
 # 2. 재설치 (UUID 자동 처리)
-cd ~/new_location/coupang_coupon_issuer
-./coupang_coupon_issuer install \
-  --access-key $(jq -r .access_key config.json) \
-  --secret-key $(jq -r .secret_key config.json) \
-  --user-id $(jq -r .user_id config.json) \
-  --vendor-id $(jq -r .vendor_id config.json)
+python3 main.py install ~/new-location \
+  --access-key $(jq -r .access_key ~/new-location/config.json) \
+  --secret-key $(jq -r .secret_key ~/new-location/config.json) \
+  --user-id $(jq -r .user_id ~/new-location/config.json) \
+  --vendor-id $(jq -r .vendor_id ~/new-location/config.json)
 ```
 
 ## 파일 구조
 
+### 배포 후 구조 (스크립트 기반)
+
 ```
-~/coupang_coupon_issuer/
-├── coupang_coupon_issuer        # 단일 실행 파일 (PyInstaller 빌드)
+# 작업 디렉토리 (사용자가 원하는 위치)
+~/my-coupons/
 ├── config.json                  # API 키 + UUID (600 권한)
-├── coupons.xlsx                 # 쿠폰 정의 (사용자 배치)
+├── coupons.xlsx                 # 쿠폰 정의 (파일명 고정)
 └── issuer.log                   # 실행 로그 (자동 생성)
+
+# 프로젝트 소스 (별도 위치, 예: /opt/coupang_coupon_issuer)
+/opt/coupang_coupon_issuer/
+├── main.py                      # CLI 진입점
+├── src/                         # 소스코드
+└── ...
 ```
 
 **config.json 구조**:
@@ -183,8 +202,8 @@ cd coupang_coupon_issuer
 uv sync
 
 # 3. 개발 모드 실행
-uv run python main.py verify ./tests/fixtures/sample_valid.xlsx
-uv run python main.py issue
+uv run python main.py verify tests/fixtures/
+uv run python main.py issue tests/fixtures/
 ```
 
 ### 테스트 실행
@@ -201,44 +220,34 @@ uv run pytest tests/unit/test_issuer.py -v
 ```
 
 **테스트 현황**:
-- **유닛 테스트**: ~43개 (PyInstaller mock 포함)
-- **통합 테스트**: 삭제됨 (PyInstaller 단순화로 불필요)
-- **커버리지**: config/api/issuer 94%+
-
-### PyInstaller 빌드
-
-```bash
-# 단일 실행 파일 빌드
-pyinstaller --onefile \
-  --name coupang_coupon_issuer \
-  main.py
-
-# 결과물: dist/coupang_coupon_issuer
-```
+- **유닛 테스트**: ~115개 (ADR 014 기준)
+- **통합 테스트**: 24개 × 4 배포판 = 96개 (계획 중)
+- **커버리지**: config/api/issuer/service 94%+
 
 ## 문서
 
 - [CLAUDE.md](CLAUDE.md) - Claude 개발 가이드
 - [docs/DEV_LOG.md](docs/DEV_LOG.md) - 작은 결정사항, 관례
 - [docs/adr/](docs/adr/) - 아키텍처 결정 기록 (ADR)
-  - [ADR 013: PyInstaller 단일 실행 파일 배포](docs/adr/013-pyinstaller-single-binary.md) - **현재 구조**
+  - [ADR 014: 스크립트 기반 배포](docs/adr/014-script-based-deployment.md) - **현재 구조**
+  - [ADR 009: 엑셀 6컬럼 구조](docs/adr/009-excel-6-column-structure.md) - 엑셀 입력 구조
 
-## 주요 변경사항 (v2.0)
+## 주요 변경사항 (v3.0)
 
-**ADR 013**: PyInstaller 단일 실행 파일 배포 전략
+**ADR 014**: 스크립트 기반 배포 전략
 
-- ✅ **단순함**: 7단계 설치 → 3단계
-- ✅ **경량화**: 코드 17% 감소, 테스트 60% 감소
-- ✅ **자급자족**: Python 의존성 제거
-- ✅ **유연성**: UUID 기반 디렉토리 이동 대응
-- ✅ **가시성**: verify 명령어로 미리보기
+- ✅ **단순함**: PyInstaller 의존성 제거
+- ✅ **빠른 개발**: 코드 변경 시 재빌드 불필요
+- ✅ **빠른 테스트**: 통합 테스트 3-5배 빠름
+- ✅ **유연성**: 런타임에 작업 디렉토리 지정
+- ✅ **표준 Python**: 개발 시 `pip install -e .` 사용
+- ✅ **고정 파일명**: 엑셀 파일명은 `coupons.xlsx`로 고정
 
-**이전 구조와 차이**:
-- `/opt`, `/usr/local/bin`, `~/.config`, `~/.local/state` 제거
-- 모든 파일이 한 디렉토리에 집중
-- `apply` → `verify` 명령어 변경
-- 전역 명령어 제거 (`./coupang_coupon_issuer`)
-- XDG Base Directory 표준 제거
+**이전 구조와 차이** (v2.0 → v3.0):
+- PyInstaller 단일 실행 파일 → Python 스크립트 실행
+- Python 설치 필요 (3.10+)
+- 작업 디렉토리를 CLI 인자로 지정
+- 엑셀 파일명 `coupons.xlsx` 고정 (파일 인자 제거)
 
 ## License
 
