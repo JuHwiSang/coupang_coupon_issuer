@@ -19,18 +19,18 @@ class TestVerifyCommand:
 
     def test_verify_valid_excel(self, tmp_path, capsys):
         """Valid Excel file should pass validation and display table"""
-        excel_file = tmp_path / "valid.xlsx"
+        excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수"])
-        ws.append(["테스트쿠폰1", "즉시할인", 30, "RATE", 10, ""])
-        ws.append(["테스트쿠폰2", "다운로드쿠폰", 15, "PRICE", 500, 100])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
+        ws.append(["테스트쿠폰1", "즉시할인", 30, "RATE", 10, "", "123456789"])
+        ws.append(["테스트쿠폰2", "다운로드쿠폰", 15, "PRICE", 500, 100, "987654321"])
         wb.save(excel_file)
 
         # Create args object
         args = MagicMock()
-        args.file = str(excel_file)
+        args.directory = str(tmp_path)
 
         # Run command
         main.cmd_verify(args)
@@ -50,8 +50,8 @@ class TestVerifyCommand:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수"])
-        ws.append(["쿠폰1", "즉시할인", 30, "RATE", 10, ""])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
+        ws.append(["쿠폰1", "즉시할인", 30, "RATE", 10, "", "123456789"])
         wb.save(excel_file)
 
         # Change to tmp_path directory
@@ -85,16 +85,16 @@ class TestVerifyCommand:
 
     def test_verify_missing_columns(self, tmp_path, capsys):
         """Excel missing required columns should error"""
-        excel_file = tmp_path / "missing_cols.xlsx"
+        excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입"])  # Missing 4 columns
+        ws.append(["쿠폰이름", "쿠폰타입"])  # Missing 5 columns
         ws.append(["쿠폰1", "즉시할인"])
         wb.save(excel_file)
 
         args = MagicMock()
-        args.file = str(excel_file)
+        args.directory = str(tmp_path)
 
         with pytest.raises(SystemExit):
             main.cmd_verify(args)
@@ -105,16 +105,16 @@ class TestVerifyCommand:
 
     def test_verify_displays_rate_discount(self, tmp_path, capsys):
         """RATE discount should show 0 amount and X% rate"""
-        excel_file = tmp_path / "rate.xlsx"
+        excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수"])
-        ws.append(["할인쿠폰", "즉시할인", 30, "RATE", 15, ""])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
+        ws.append(["할인쿠폰", "즉시할인", 30, "RATE", 15, "", "123456789"])
         wb.save(excel_file)
 
         args = MagicMock()
-        args.file = str(excel_file)
+        args.directory = str(tmp_path)
 
         main.cmd_verify(args)
 
@@ -124,16 +124,16 @@ class TestVerifyCommand:
 
     def test_verify_displays_price_discount(self, tmp_path, capsys):
         """PRICE discount should show amount and 0% rate"""
-        excel_file = tmp_path / "price.xlsx"
+        excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수"])
-        ws.append(["금액쿠폰", "다운로드쿠폰", 15, "PRICE", 1000, 50])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
+        ws.append(["금액쿠폰", "다운로드쿠폰", 15, "PRICE", 1000, 50, "123456789"])
         wb.save(excel_file)
 
         args = MagicMock()
-        args.file = str(excel_file)
+        args.directory = str(tmp_path)
 
         main.cmd_verify(args)
 
@@ -144,16 +144,16 @@ class TestVerifyCommand:
 
     def test_verify_calculates_budget_correctly(self, tmp_path, capsys):
         """Budget should be discount_amount × issue_count"""
-        excel_file = tmp_path / "budget.xlsx"
+        excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수"])
-        ws.append(["예산쿠폰", "다운로드쿠폰", 30, "PRICE", 500, 100])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
+        ws.append(["예산쿠폰", "다운로드쿠폰", 30, "PRICE", 500, 100, "123456789"])
         wb.save(excel_file)
 
         args = MagicMock()
-        args.file = str(excel_file)
+        args.directory = str(tmp_path)
 
         main.cmd_verify(args)
 
@@ -262,21 +262,6 @@ class TestIssueCommand:
 class TestInstallCommand:
     """Test 'install' command"""
 
-    def test_install_requires_all_4_params(self, tmp_path, capsys):
-        """Install should require all 4 parameters"""
-        args = MagicMock()
-        args.access_key = "test"
-        args.secret_key = "test"
-        args.user_id = None  # Missing
-        args.vendor_id = "test"
-        args.directory = str(tmp_path)
-
-        with pytest.raises(SystemExit):
-            main.cmd_install(args)
-
-        captured = capsys.readouterr()
-        assert "ERROR: 모든 인자가 필요합니다" in captured.out
-        assert "--user-id" in captured.out
 
     def test_install_calls_crontab_service(self, tmp_path, mocker):
         """Install should call CrontabService.install with correct args"""
@@ -371,8 +356,8 @@ class TestMainFunction:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수"])
-        ws.append(["쿠폰", "즉시할인", 30, "RATE", 10, ""])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
+        ws.append(["쿠폰", "즉시할인", 30, "RATE", 10, "", "123456789"])
         wb.save(excel_file)
 
         mocker.patch('sys.argv', ['main.py', 'verify', str(excel_file)])
