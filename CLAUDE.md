@@ -142,10 +142,14 @@ tests/
 │   ├── test_issuer.py           # 쿠폰 발급 로직 (32개)
 │   ├── test_service.py          # Cron 관리 (23개, Linux only)
 │   └── test_cli.py              # CLI 명령어 (21개)
-├── integration/                 # 통합 테스트 (24개 × 4 배포판 = 96개)
+├── integration/                 # 통합 테스트 (7개, 신규)
+│   ├── conftest.py              # Mock fixtures (Coupang API 모킹)
+│   └── test_issue.py            # issue 기능 통합 테스트
+├── e2e/                         # E2E 테스트 (24개 × 4 배포판 = 96개)
 │   ├── conftest.py              # Docker 인프라
 │   ├── test_verify.py
 │   ├── test_install.py
+│   ├── test_issue.py            # 실제 API 호출
 │   └── test_uninstall.py
 └── fixtures/                    # 테스트 엑셀 파일
 ```
@@ -418,14 +422,17 @@ tests/
 # 유닛 테스트 (Windows 호환, 빠름)
 uv run pytest tests/unit -v
 
-# 통합 테스트 (Docker Desktop 필요, 느림)
+# 통합 테스트 (Windows 호환, 빠름, 외부 API 모킹)
 uv run pytest tests/integration -v -m integration
+
+# E2E 테스트 (Docker Desktop 필요, 느림, 실제 API 호출)
+uv run pytest tests/e2e -v -m e2e
 
 # 전체 테스트
 uv run pytest -v
 
 # 커버리지 포함
-uv run pytest tests/unit --cov=src/coupang_coupon_issuer --cov-report=html
+uv run pytest tests/unit tests/integration --cov=src/coupang_coupon_issuer --cov-report=html
 
 # 특정 파일만
 uv run pytest tests/unit/test_issuer.py -v
@@ -437,10 +444,12 @@ uv run pytest tests/unit/test_issuer.py -v
   - Windows 환경: 121개 중 98개 실행 (service.py 23개 스킵)
   - Linux 환경: 121개 전부 실행 가능
 - **통합 테스트**:
+  - Windows/Linux: 7개 모두 실행 가능 (외부 API 모킹)
+- **E2E 테스트**:
   - Windows: Docker Desktop(WSL2) 필요
   - Linux: Docker만 필요
   - **다중 배포판 테스트**: 24개 × 4개 배포판 = 96개 자동 실행
-  - **테스트 시간**: 약 7분 (사전 빌드 이미지 재사용 시)
+  - **테스트 시간**: 약 2-3분 (사전 빌드 이미지 재사용 시)
 
 ### 테스트 Fixture
 

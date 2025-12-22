@@ -7,7 +7,7 @@ Tests the script-based verify command in a real Docker environment.
 import pytest
 
 
-@pytest.mark.integration
+@pytest.mark.e2e
 class TestVerifyCommand:
     """Test verify command with Python script"""
 

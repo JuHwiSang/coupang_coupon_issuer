@@ -1,0 +1,1 @@
+CLAUDE.md를 참조. CLAUDE.md를 메인 컨텍스트 유지 파일로 사용

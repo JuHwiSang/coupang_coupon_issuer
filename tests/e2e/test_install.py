@@ -8,7 +8,7 @@ import pytest
 import json
 
 
-@pytest.mark.integration
+@pytest.mark.e2e
 class TestInstallCommand:
     """Test install command with Python script"""
 
