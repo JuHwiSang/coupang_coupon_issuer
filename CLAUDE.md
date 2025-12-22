@@ -189,20 +189,30 @@ python3 main.py issue ~/my-coupons    # 특정 디렉토리
 # 2-1. Jitter 적용 (Thundering herd 방지)
 python3 main.py issue . --jitter-max 60  # 0-60분 랜덤 지연
 
-# 3. 서비스 설치 (cron 등록) - 디렉토리 필수
+# 3. 서비스 설치 (cron 등록)
+python3 main.py install [디렉토리]
+# 예시:
+python3 main.py install .               # 현재 디렉토리
+python3 main.py install ~/my-coupons    # 특정 디렉토리
+
+# 3-1. 옵션으로 인증 정보 제공 (대화형 입력 생략)
 python3 main.py install ~/my-coupons \
   --access-key YOUR_KEY \
   --secret-key YOUR_SECRET \
   --user-id YOUR_USER_ID \
   --vendor-id YOUR_VENDOR_ID
 
-# 3-1. 서비스 설치 (Jitter 활성화)
+# 3-2. 옵션 없이 실행 시 대화형 입력
+python3 main.py install ~/my-coupons
+# → access key: [입력]
+# → secret key: [입력]
+# → user id: [입력]
+# → vendor id: [입력]
+
+# 3-3. 서비스 설치 (Jitter 활성화)
 python3 main.py install ~/my-coupons \
-  --access-key YOUR_KEY \
-  --secret-key YOUR_SECRET \
-  --user-id YOUR_USER_ID \
-  --vendor-id YOUR_VENDOR_ID \
   --jitter-max 60  # 선택사항: 0-60분 랜덤 지연
+# → 인증 정보는 대화형으로 입력받음
 
 # 4. 서비스 제거 (cron 제거)
 python3 main.py uninstall [디렉토리]
@@ -217,9 +227,11 @@ tail -f ~/my-coupons/issuer.log       # 로그 확인
 **주요 변경사항 (ADR 014)**:
 - Python 스크립트 실행: `python3 main.py` (PyInstaller 제거)
 - 디렉토리 인자 추가: 작업 디렉토리를 런타임에 지정
-- 기본값 pwd: 디렉토리 미지정 시 현재 디렉토리 사용 (install 제외, 필수)
+- 기본값 pwd: 디렉토리 미지정 시 현재 디렉토리 사용 (기본값: `"."`)
 - UUID 기반 추적: 디렉토리 이동 시 재설치 자동 처리
 - 로그 위치: 작업 디렉토리 내 issuer.log
+- **대화형 입력**: install 시 옵션 미지정 시 대화형으로 입력받음
+- **자동 제거**: uninstall 시 config.json 자동 삭제
 
 **Jitter 기능 (ADR 011)**:
 - 여러 인스턴스 동시 실행 시 API 부하 분산 (Thundering herd 방지)
@@ -318,6 +330,9 @@ cat ~/my-coupons/issuer.log | grep ERROR
 - [x] Cron 기반 스케줄링
 - [x] Jitter 기능 (Thundering herd 방지)
 - [x] 설치 단순화 (7단계 → 3단계)
+- [x] 대화형 입력 (install 시 옵션 미지정 시)
+- [x] 제거 시 config.json 자동 삭제
+- [x] CredentialManager 레거시 제거
 
 ### 문서화
 - [x] DEV_LOG (로깅 규칙, 검증 규칙 등)
@@ -527,12 +542,12 @@ pip3 install requests openpyxl
 mkdir ~/my-coupons
 cp coupons.xlsx ~/my-coupons/
 
-# 4. 서비스 설치
-python3 main.py install ~/my-coupons \
-  --access-key YOUR_KEY \
-  --secret-key YOUR_SECRET \
-  --user-id YOUR_USER_ID \
-  --vendor-id YOUR_VENDOR_ID
+# 4. 서비스 설치 (대화형 입력)
+python3 main.py install ~/my-coupons
+# → access key: [입력]
+# → secret key: [입력]
+# → user id: [입력]
+# → vendor id: [입력]
 
 # 5. 로그 확인
 tail -f ~/my-coupons/issuer.log

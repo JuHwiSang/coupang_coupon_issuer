@@ -474,3 +474,96 @@ if issue_count < 1:  # try-except 외부로 이동
 - 예: `re.sub(r'[^\d.]', '', "xyz")` → `""` → `COUPON_DEFAULT_ISSUE_COUNT`
 
 ---
+
+## 2024-12-22
+
+### CLI 사용성 개선 (커밋 80308b7)
+
+**변경사항**: install 명령어 대화형 입력 지원
+
+**Before**:
+```bash
+# 4개 옵션 모두 필수
+python3 main.py install ~/my-coupons \
+  --access-key KEY \
+  --secret-key SECRET \
+  --user-id USER \
+  --vendor-id VENDOR
+```
+
+**After**:
+```bash
+# 옵션 없이 실행 시 대화형 입력
+python3 main.py install ~/my-coupons
+# → access key: [입력]
+# → secret key: [입력]
+# → user id: [입력]
+# → vendor id: [입력]
+
+# 옵션 제공 시 대화형 입력 생략
+python3 main.py install ~/my-coupons --access-key KEY --secret-key SECRET ...
+```
+
+**디렉토리 기본값**:
+- `issue`, `uninstall`: 기본값 `"."` (현재 디렉토리)
+- `install`: 기본값 `"."` (추가됨, 이전에는 필수였음)
+- `verify`: 기본값 `"."` (유지)
+
+**주요 파일 변경**:
+- [main.py:192-215](main.py#L192-L215) - `cmd_install()`: 4개 파라미터 대화형 입력 처리
+- [main.py:303-312](main.py#L303-L312) - argparse: `required=True` → `required=False`
+- [main.py:288](main.py#L288) - `issue` 디렉토리 기본값 `"."` 추가
+- [main.py:323](main.py#L323) - `uninstall` 디렉토리 기본값 `"."` 추가
+- [main.py:305](main.py#L305) - `install` 디렉토리 `nargs="?"` 추가
+
+**테스트 영향**:
+- test_cli.py 업데이트 필요 (대화형 입력 mock)
+
+### Uninstall 자동 정리 (커밋 5a21b80)
+
+**변경사항**: uninstall 시 config.json 자동 제거
+
+**Before**:
+```bash
+coupang_coupon_issuer uninstall
+# → Cron job 제거만 수행
+# → 설정 파일 유지: ~/.../config.json
+# → 완전 삭제: rm -rf ~/my-coupons
+```
+
+**After**:
+```bash
+coupang_coupon_issuer uninstall
+# → Cron job 제거
+# → 설정 파일 자동 제거 (config.json)
+# → coupons.xlsx, issuer.log는 유지 (사용자 데이터)
+```
+
+**구현**:
+- [config.py:235-242](src/coupang_coupon_issuer/config.py#L235-L242) - `ConfigManager.remove()` 메서드 추가
+- [service.py:325-326](src/coupang_coupon_issuer/service.py#L325-L326) - uninstall 시 `ConfigManager.remove()` 호출
+
+**정책**:
+- **자동 제거**: config.json (재생성 가능, 민감 정보)
+- **유지**: coupons.xlsx, issuer.log (사용자 데이터)
+
+**테스트 영향**:
+- test_service.py: uninstall 테스트에 config.json 제거 검증 추가 필요
+- test_config.py: `ConfigManager.remove()` 유닛 테스트 추가 필요
+
+### 레거시 코드 제거 (커밋 624b3a8)
+
+**변경사항**: CredentialManager alias 제거
+
+**삭제 항목**:
+- [config.py:245-247](src/coupang_coupon_issuer/config.py#L245-L247) - `CredentialManager = ConfigManager` (레거시 alias)
+- [test_config.py:374-385](tests/unit/test_config.py#L374-L385) - `TestLegacyCompatibility` 클래스 (11 lines)
+
+**배경**:
+- CredentialManager는 초기 네이밍이었으나 ConfigManager로 통일
+- Alias를 유지할 필요성 없음 (프로젝트 미배포, 하위 호환성 불필요)
+
+**테스트 개수 변화**:
+- 유닛 테스트: 109개 → 108개 (-1개)
+
+---
