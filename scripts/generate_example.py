@@ -8,6 +8,186 @@
 from pathlib import Path
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.comments import Comment
+from openpyxl.worksheet.datavalidation import DataValidation
+
+
+def add_header_comments(ws):
+    """헤더에 상세 설명 주석 추가"""
+    comments = {
+        'A1': (
+            "쿠폰의 이름을 입력하세요.\n\n"
+            "예시:\n"
+            "- 신규회원 할인쿠폰\n"
+            "- 주말 특별 할인\n"
+            "- 1월 감사 쿠폰"
+        ),
+        
+        'B1': (
+            "쿠폰 타입을 선택하세요.\n\n"
+            "▪ 즉시할인: 상품 페이지에서 자동으로 할인 적용\n"
+            "▪ 다운로드쿠폰: 사용자가 다운로드 후 사용\n\n"
+            "⚠ 주의: 드롭다운에서 선택하세요"
+        ),
+        
+        'C1': (
+            "쿠폰의 유효 기간을 일(day) 단위로 입력하세요.\n\n"
+            "예시:\n"
+            "- 7 → 7일간 유효\n"
+            "- 30 → 30일간 유효\n\n"
+            "⚠ 숫자만 입력 (1~365)"
+        ),
+        
+        'D1': (
+            "할인 방식을 선택하세요.\n\n"
+            "▪ 정률할인: 정해진 비율(%)만큼 할인\n"
+            "  - 다운로드쿠폰: 1~99%\n"
+            "  - 즉시할인: 1~100%\n\n"
+            "▪ 정액할인: 정해진 금액(원)만큼 할인\n"
+            "  - 다운로드쿠폰: 10원 단위(10, 20, 30...)\n"
+            "  - 즉시할인: 1원 이상\n\n"
+            "▪ 수량별 정액할인: n개 구매 시 n번 할인\n"
+            "  - 즉시할인 전용\n\n"
+            "⚠ 주의: 드롭다운에서 선택하세요"
+        ),
+        
+        'E1': (
+            "할인 방식에 따른 할인 값을 입력하세요.\n\n"
+            "▪ 정률할인: 1~100 사이의 숫자\n"
+            "  - 10% 할인 → 10 입력 (% 기호 없이)\n"
+            "  - 다운로드쿠폰은 최대 99까지\n\n"
+            "▪ 정액할인: 할인 금액(원)\n"
+            "  - 1000원 할인 → 1000 입력 (원 없이)\n"
+            "  - 다운로드쿠폰은 10원 단위로\n\n"
+            "▪ 수량별 정액할인: 1 이상의 숫자\n\n"
+            "⚠ 주의: 숫자만 입력하세요"
+        ),
+        
+        'F1': (
+            "다운로드쿠폰의 일일 발급 개수를 입력하세요.\n\n"
+            "예시:\n"
+            "- 100 → 하루에 100개까지 발급\n"
+            "- 빈칸 → 기본값(1개) 사용\n\n"
+            "⚠ 즉시할인쿠폰은 비워두세요\n"
+            "⚠ 숫자만 입력 (1 이상)"
+        ),
+        
+        'G1': (
+            "쿠폰을 적용할 상품 옵션 ID를 입력하세요.\n\n"
+            "▪ 여러 개일 경우 쉼표(,)로 구분\n"
+            "▪ 공백 없이 입력하세요\n\n"
+            "예시:\n"
+            "- 단일: 1234567890\n"
+            "- 여러 개: 1234567890,9876543210,1122334455\n\n"
+            "⚠ 필수 항목입니다\n"
+            "⚠ 숫자와 쉼표만 입력"
+        ),
+    }
+    
+    for cell_ref, comment_text in comments.items():
+        ws[cell_ref].comment = Comment(comment_text, "시스템")
+
+
+def add_data_validations(ws):
+    """데이터 유효성 검사 추가 (공통 제약만)"""
+    
+    # Column B: 쿠폰타입 (드롭다운)
+    dv_coupon_type = DataValidation(
+        type="list",
+        formula1='"즉시할인,다운로드쿠폰"',
+        allow_blank=False,
+        showErrorMessage=True,
+        errorTitle="입력 오류",
+        error="'즉시할인' 또는 '다운로드쿠폰'을 선택하세요",
+        promptTitle="쿠폰타입",
+        prompt="드롭다운에서 즉시할인 또는 다운로드쿠폰을 선택하세요"
+    )
+    dv_coupon_type.add('B2:B1000')
+    ws.add_data_validation(dv_coupon_type)
+    
+    # Column C: 쿠폰유효기간 (1~365 정수)
+    dv_validity = DataValidation(
+        type="whole",
+        operator="between",
+        formula1=1,
+        formula2=365,
+        allow_blank=False,
+        showErrorMessage=True,
+        errorTitle="입력 오류",
+        error="1~365 사이의 숫자를 입력하세요",
+        promptTitle="쿠폰유효기간",
+        prompt="유효기간을 일(day) 단위로 입력하세요 (1~365)"
+    )
+    dv_validity.add('C2:C1000')
+    ws.add_data_validation(dv_validity)
+    
+    # Column D: 할인방식 (드롭다운)
+    dv_discount_type = DataValidation(
+        type="list",
+        formula1='"정률할인,정액할인,수량별 정액할인"',
+        allow_blank=False,
+        showErrorMessage=True,
+        errorTitle="입력 오류",
+        error="'정률할인', '정액할인', '수량별 정액할인' 중 하나를 선택하세요",
+        promptTitle="할인방식",
+        prompt="드롭다운에서 할인 방식을 선택하세요"
+    )
+    dv_discount_type.add('D2:D1000')
+    ws.add_data_validation(dv_discount_type)
+    
+    # Column E: 할인금액/비율 (1 이상 정수, 공통 제약만)
+    dv_discount = DataValidation(
+        type="whole",
+        operator="greaterThanOrEqual",
+        formula1=1,
+        allow_blank=False,
+        showInputMessage=True,
+        showErrorMessage=False,  # Warning만 (쿠폰 타입별로 검증이 다름)
+        errorStyle="warning",
+        errorTitle="확인 필요",
+        error="할인방식과 쿠폰타입에 따라 값의 범위가 다릅니다. 실행 시 재검증됩니다.",
+        promptTitle="할인금액/비율",
+        prompt=(
+            "정률할인: 1~100 (% 기호 없이)\n"
+            "정액할인: 금액 (원 없이)\n"
+            "수량별 정액할인: 1 이상"
+        )
+    )
+    dv_discount.add('E2:E1000')
+    ws.add_data_validation(dv_discount)
+    
+    # Column F: 발급개수 (1 이상 정수, 선택적)
+    dv_issue_count = DataValidation(
+        type="whole",
+        operator="greaterThanOrEqual",
+        formula1=1,
+        allow_blank=True,  # 즉시할인은 비워둬도 됨
+        showInputMessage=True,
+        showErrorMessage=False,  # Warning만
+        errorStyle="warning",
+        errorTitle="확인 필요",
+        error="다운로드쿠폰인 경우 1 이상의 숫자를 입력하세요. 즉시할인은 비워두세요.",
+        promptTitle="발급개수",
+        prompt="다운로드쿠폰의 일일 발급 개수 (즉시할인은 비워두기)"
+    )
+    dv_issue_count.add('F2:F1000')
+    ws.add_data_validation(dv_issue_count)
+    
+    # Column G: 옵션ID (텍스트, 정보성 메시지만)
+    dv_vendor_items = DataValidation(
+        type="textLength",
+        operator="greaterThan",
+        formula1=0,
+        allow_blank=False,
+        showInputMessage=True,
+        showErrorMessage=True,
+        errorTitle="입력 오류",
+        error="옵션ID는 필수 입력입니다. 숫자를 쉼표로 구분하여 입력하세요.",
+        promptTitle="옵션ID",
+        prompt="상품 옵션 ID를 입력하세요 (여러 개는 쉼표로 구분)"
+    )
+    dv_vendor_items.add('G2:G1000')
+    ws.add_data_validation(dv_vendor_items)
 
 
 def create_excel_with_headers():
@@ -46,6 +226,12 @@ def create_excel_with_headers():
     ws.column_dimensions['E'].width = 15  # 할인금액/비율
     ws.column_dimensions['F'].width = 12  # 발급개수
     ws.column_dimensions['G'].width = 25  # 옵션ID
+    
+    # 헤더 주석 추가
+    add_header_comments(ws)
+    
+    # 데이터 유효성 검사 추가
+    add_data_validations(ws)
     
     return wb, ws
 

@@ -758,4 +758,59 @@ uv run python scripts/generate_example.py
 
 **참조**: [ADR 018](adr/018-korean-discount-type-names.md)
 
+### 엑셀 예시 파일 개선 - 헤더 주석 및 데이터 유효성 검사
+
+**목적**: 비전문가 사용자가 엑셀 파일 작성 시 실수를 줄이고 올바른 입력을 유도
+
+**추가된 기능**:
+
+1. **헤더 주석 (Header Comments)**:
+   - 각 컬럼 헤더에 마우스 오버 시 상세 설명 표시
+   - 비개발자가 실수할 만한 내용 강조 (% 없이 10 입력, 원 없이 1000 입력 등)
+   - 쿠폰 타입별 차이점 명시
+
+2. **데이터 유효성 검사 (Data Validation)**:
+   - **쿠폰타입** (Column B): 드롭다운 (즉시할인, 다운로드쿠폰)
+   - **쿠폰유효기간** (Column C): 1~365 정수
+   - **할인방식** (Column D): 드롭다운 (정률할인, 정액할인, 수량별 정액할인)
+   - **할인금액/비율** (Column E): 1 이상 정수 (Warning, 공통 제약만)
+   - **발급개수** (Column F): 1 이상 정수, 선택적 (Warning)
+   - **옵션ID** (Column G): 필수 텍스트
+
+**구현 방식**:
+- `openpyxl.comments.Comment`로 헤더 주석 추가
+- `openpyxl.worksheet.datavalidation.DataValidation`으로 유효성 검사 추가
+- 쿠폰 타입별로 검증 규칙이 다른 컬럼은 **Warning만 표시**하고 실행 시 재검증
+
+**제약 전략 (ADR 017, 018 반영)**:
+- 다운로드/즉시할인 여부에 따라 검증 규칙이 다르므로 **공통 제약만 적용**
+- 정률할인: 다운로드 1~99, 즉시할인 1~100 → Excel에서는 ≥1로만 제한
+- 정액할인: 다운로드 10원 단위, 즉시할인 1원 이상 → Excel에서는 ≥1로만 제한
+- 세부 검증은 `issuer.py`에서 수행
+
+**생성된 파일**:
+- `examples/basic.xlsx` - 헤더 주석 및 유효성 검사 포함
+- `examples/comprehensive.xlsx` - 헤더 주석 및 유효성 검사 포함
+- `examples/edge_cases.xlsx` - 헤더 주석 및 유효성 검사 포함
+
+**사용법**:
+```bash
+uv run python scripts/generate_example.py
+```
+
+**검증**:
+```bash
+# 예제 파일 확인
+uv run python main.py verify examples/
+```
+
+**주요 주석 내용**:
+- 쿠폰이름: 예시 제공 (신규회원 할인쿠폰 등)
+- 쿠폰타입: 즉시할인 vs 다운로드쿠폰 차이 설명
+- 쿠폰유효기간: 일 단위 설명 (7 → 7일간 유효)
+- 할인방식: 쿠폰 타입별 차이 명시 (정률: 다운로드 1~99, 즉시할인 1~100)
+- 할인금액/비율: **% 기호 없이**, **원 없이** 입력 강조
+- 발급개수: 즉시할인은 비워두기 명시
+- 옵션ID: 쉼표 구분, 공백 없이 입력 강조
+
 ---

@@ -45,7 +45,26 @@ pip3 install -e .
 pip3 install requests openpyxl
 ```
 
-### 2. 작업 디렉토리 생성 및 엑셀 파일 배치
+### 2. 엑셀 예시 파일 생성 (선택사항)
+
+엑셀 포맷을 쉽게 이해할 수 있도록 예제 파일을 생성할 수 있습니다:
+
+```bash
+# 예제 파일 생성
+python3 scripts/generate_example.py
+```
+
+생성되는 파일 (`examples/` 디렉토리):
+- **basic.xlsx**: 기본 예제 (2개 쿠폰)
+- **comprehensive.xlsx**: 전체 예제 (6개 쿠폰)
+- **edge_cases.xlsx**: 엣지 케이스 (7개 쿠폰)
+
+**비전문가를 위한 기능**:
+- 헤더 주석으로 각 컬럼 설명 제공
+- 드롭다운 선택 (쿠폰타입, 할인방식)
+- 데이터 유효성 검사 (숫자 범위 제한)
+
+### 3. 작업 디렉토리 생성 및 엑셀 파일 배치
 
 ```bash
 # 작업 디렉토리 생성
@@ -66,7 +85,7 @@ cp /path/to/coupons.xlsx ~/my-coupons/
 
 **중요**: 엑셀 파일명은 반드시 `coupons.xlsx`여야 합니다.
 
-### 3. 엑셀 검증
+### 4. 엑셀 검증
 
 ```bash
 # 엑셀 파일 검증 및 전체 내용 확인 (테이블 형식)
@@ -88,7 +107,7 @@ python3 main.py verify ~/my-coupons
 검증 완료. 문제없이 발급 가능합니다.
 ```
 
-### 4. 서비스 설치 (Cron 등록)
+### 5. 서비스 설치 (Cron 등록)
 
 ```bash
 # 기본 설치 (대화형 입력)
@@ -131,10 +150,10 @@ cat ~/my-coupons/issuer.log | grep ERROR
 python3 main.py issue ~/my-coupons
 
 # 단발성 테스트 (Jitter 포함)
-python3 main.py issue ~/my-coupons --jitter-max 30
+python3 main.py issue ~/my-coupons --jitter-max 60
 ```
 
-### 6. 서비스 제거
+### 7. 서비스 제거
 
 ```bash
 # Cron job 및 config.json 제거 (엑셀 파일과 로그는 유지)
