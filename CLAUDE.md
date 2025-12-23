@@ -109,6 +109,8 @@ main.py                          # CLI 진입점
 src/coupang_coupon_issuer/
 ├── config.py                    # ConfigManager, 경로 해결 함수들
 ├── coupang_api.py               # Coupang API 클라이언트 (HMAC-SHA256)
+├── reader.py                    # 엑셀 파일 읽기 및 검증 (공통 모듈)
+├── utils.py                     # 한글 너비 고려 정렬 유틸리티
 ├── issuer.py                    # 쿠폰 발급 로직
 ├── jitter.py                    # Jitter 스케줄러
 └── service.py                   # Cron 설치/제거
@@ -153,9 +155,11 @@ examples/                        # 엑셀 예시 파일 (자동 생성)
 # 테스트
 tests/
 ├── conftest.py                  # 공통 fixture (간소화됨)
-├── unit/                        # 유닛 테스트 (~115개)
+├── unit/                        # 유닛 테스트 (~143개)
 │   ├── test_config.py           # ConfigManager (26개)
 │   ├── test_coupang_api.py      # API 클라이언트 (12개)
+│   ├── test_reader.py           # 엑셀 읽기/검증 (20개)
+│   ├── test_utils.py            # 한글 정렬 유틸리티 (17개)
 │   ├── test_issuer.py           # 쿠폰 발급 로직 (32개)
 │   ├── test_service.py          # Cron 관리 (23개, Linux only)
 │   └── test_cli.py              # CLI 명령어 (21개)

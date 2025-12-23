@@ -814,3 +814,63 @@ uv run python main.py verify examples/
 - 옵션ID: 쉼표 구분, 공백 없이 입력 강조
 
 ---
+---
+
+## 2024-12-24
+
+### 엑셀 로직 분리 및 테스트 추가
+
+**목적**: `verify` 명령어와 `issue` 명령어가 동일한 엑셀 읽기/검증 로직을 사용하도록 공통 모듈 분리
+
+**변경사항**:
+
+1. **신규 모듈: `reader.py`**
+   - 엑셀 파일 읽기 및 검증 로직 중앙화
+   - `fetch_coupons_from_excel(excel_path: Path)` 함수 제공
+   - `DISCOUNT_TYPE_KR_TO_EN`, `DISCOUNT_TYPE_EN_TO_KR` 상수 이동
+   - ADR 002 (입력 정규화), ADR 017 (타입별 검증), ADR 018 (한글 할인방식) 모두 반영
+
+2. **신규 모듈: `utils.py`**
+   - 한글 너비 고려 정렬 유틸리티
+   - `get_visual_width(text)`: East Asian 문자 너비 계산 (W/F = 2, 나머지 = 1)
+   - `kor_align(text, width, align)`: 한글 너비를 고려한 정렬 (우측/좌측/중앙)
+
+3. **`issuer.py` 리팩토링**
+   - `_fetch_coupons_from_excel()` 메서드를 `reader.fetch_coupons_from_excel()` 호출로 변경
+   - 중복 코드 제거, 로직 단일화
+
+4. **`main.py` 리팩토링**
+   - `cmd_verify()` 함수에서 `reader.fetch_coupons_from_excel()` 사용
+   - 테이블 출력 개선:
+     - 우측 정렬 적용 (`kor_align` 사용)
+     - 할인방식 한글 변환 (`DISCOUNT_TYPE_EN_TO_KR`)
+     - 컬럼별 너비 차등화: No(4), 쿠폰이름(25), 쿠폰타입(13), 유효기간(10), 할인방식(17), 할인금액(10), 할인비율(10), 발급개수(10), 총 예산(12)
+     - 비해당 컬럼 빈 문자열 처리:
+       - 정률할인: 할인금액 비움
+       - 정액할인/수량할인: 할인비율 비움
+       - 즉시할인: 발급개수 비움
+
+5. **단위 테스트 추가**
+   - `tests/unit/test_reader.py` (20개 테스트)
+     - 엑셀 파싱 검증
+     - 한글 할인방식 매핑
+     - 타입별 검증 규칙 (ADR 017)
+     - 입력 정규화 (ADR 002)
+     - 엑셀 헤더 변형 ("옵션 ID" 허용)
+   - `tests/unit/test_utils.py` (17개 테스트)
+     - `get_visual_width()`: ASCII, 한글, 혼합 문자열 너비 계산
+     - `kor_align()`: 우측/좌측/중앙 정렬 검증
+
+**테스트 결과**:
+- 유닛 테스트: 115개 → 143개 (+28개)
+- 전체 테스트: 143개 통과 (Windows 환경)
+
+**문서 업데이트**:
+- CLAUDE.md: 프로젝트 구조에 `reader.py`, `utils.py` 추가
+- DEV_LOG.md: 본 항목 추가
+
+**참조**:
+- [src/coupang_coupon_issuer/reader.py](../src/coupang_coupon_issuer/reader.py) - 엑셀 읽기 모듈
+- [src/coupang_coupon_issuer/utils.py](../src/coupang_coupon_issuer/utils.py) - 정렬 유틸리티
+- [tests/unit/test_reader.py](../tests/unit/test_reader.py) - 엑셀 로직 테스트
+- [tests/unit/test_utils.py](../tests/unit/test_utils.py) - 정렬 유틸리티 테스트
