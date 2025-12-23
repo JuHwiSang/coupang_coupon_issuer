@@ -40,6 +40,7 @@
 - [ADR 015: 옵션ID 컴럼 추가](docs/adr/015-option-id-column.md) - **현재 구조**, 7컴럼 엑셀 구조, vendor_items 필드
 - [ADR 016: 테스트 레이어 분리](docs/adr/016-test-layer-separation.md) - unit/integration/e2e 분리 전략
 - [ADR 017: 쿠폰 타입별 할인 검증 규칙 분리](docs/adr/017-coupon-type-specific-validation.md) - 다운로드/즉시할인 쿠폰 검증 분리
+- [ADR 018: 할인방식 한글 입력 지원](docs/adr/018-korean-discount-type-names.md) - 정률할인/수량별 정액할인/정액할인 한글 입력
 
 ### 📝 문서 작성 규칙
 
@@ -135,7 +136,9 @@ docs/
 │   ├── 013-pyinstaller-single-binary.md  # (대체됨)
 │   ├── 014-script-based-deployment.md  # **현재 구조**
 │   ├── 015-option-id-column.md  # **현재 구조**
-│   └── 016-test-layer-separation.md
+│   ├── 016-test-layer-separation.md
+│   ├── 017-coupon-type-specific-validation.md
+│   └── 018-korean-discount-type-names.md
 └── coupang/                     # Coupang API 규격 문서
     ├── workflow.md
     ├── parameters-explained.md
@@ -589,11 +592,11 @@ uv run python scripts/generate_example.py
 - **comprehensive.xlsx**: 모든 쿠폰 타입과 할인 방식 조합 6개
 - **edge_cases.xlsx**: 최소/최대값, 다중 옵션 등 7개
 
-각 Excel 파일은 7개 컬럼 구조를 따릅니다 (ADR 015):
+각 Excel 파일은 7개 컬럼 구조를 따릅니다 (ADR 015, ADR 018):
 1. 쿠폰이름
 2. 쿠폰타입 (즉시할인 / 다운로드쿠폰)
 3. 쿠폰유효기간 (일 단위)
-4. 할인방식 (RATE / PRICE / FIXED_WITH_QUANTITY)
+4. 할인방식 (정률할인 / 정액할인 / 수량별 정액할인) - **한글 입력**
 5. 할인금액/비율
 6. 발급개수
 7. 옵션ID (쉼표로 구분)

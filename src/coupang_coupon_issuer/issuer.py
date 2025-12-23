@@ -17,6 +17,20 @@ from .config import (
 )
 
 
+# 할인방식 한글-영어 매핑
+DISCOUNT_TYPE_KR_TO_EN = {
+    '정률할인': 'RATE',
+    '수량별 정액할인': 'FIXED_WITH_QUANTITY',
+    '정액할인': 'PRICE',
+}
+
+DISCOUNT_TYPE_EN_TO_KR = {
+    'RATE': '정률할인',
+    'FIXED_WITH_QUANTITY': '수량별 정액할인',
+    'PRICE': '정액할인',
+}
+
+
 class CouponIssuer:
     """쿠폰 발급 담당 클래스"""
 
@@ -424,20 +438,18 @@ class CouponIssuer:
                 except (ValueError, TypeError):
                     raise ValueError(f"행 {row_idx}: 쿠폰유효기간은 숫자여야 합니다 (현재값: {validity_days_raw})")
 
-                # 4. 할인방식: upper case + '-'를 '_'로 변환 + 포함 체크
-                discount_type_raw = str(row[col_indices['할인방식']]).strip()
-                discount_type_normalized = discount_type_raw.upper().replace('-', '_')
 
-                if 'RATE' in discount_type_normalized:
-                    discount_type = 'RATE'
-                elif 'FIXED_WITH_QUANTITY' in discount_type_normalized or 'FIXED WITH QUANTITY' in discount_type_normalized.replace('_', ' '):
-                    discount_type = 'FIXED_WITH_QUANTITY'
-                elif 'PRICE' in discount_type_normalized:
-                    discount_type = 'PRICE'
+                # 4. 할인방식: 한글 입력 지원
+                discount_type_raw = str(row[col_indices['할인방식']]).strip()
+                
+                # 한글 매핑 시도
+                if discount_type_raw in DISCOUNT_TYPE_KR_TO_EN:
+                    discount_type = DISCOUNT_TYPE_KR_TO_EN[discount_type_raw]
                 else:
                     raise ValueError(
-                        f"행 {row_idx}: 잘못된 할인방식 '{discount_type_raw}' (RATE/FIXED_WITH_QUANTITY/PRICE만 가능)"
+                        f"행 {row_idx}: 잘못된 할인방식 '{discount_type_raw}' (정률할인/수량별 정액할인/정액할인만 가능)"
                     )
+
 
                 # 5. 할인금액/비율: 숫자만 추출 -> float -> int
                 discount_raw = str(row[col_indices['할인금액/비율']])
@@ -479,27 +491,27 @@ class CouponIssuer:
                     if discount_type == 'RATE':
                         # 정률할인: 1~99% 범위 체크 (100% 불가)
                         if not (1 <= discount <= 99):
-                            raise ValueError(f"행 {row_idx}: 다운로드쿠폰 RATE 할인율은 1~99 사이여야 합니다 (현재: {discount})")
+                            raise ValueError(f"행 {row_idx}: 다운로드쿠폰 정률할인은 1~99 사이여야 합니다 (현재: {discount})")
                     elif discount_type == 'PRICE':
                         # 정액할인: 10원 단위 및 최소 10원 체크
                         if discount < 10:
-                            raise ValueError(f"행 {row_idx}: 다운로드쿠폰 PRICE 할인금액은 최소 10원 이상이어야 합니다 (현재: {discount})")
+                            raise ValueError(f"행 {row_idx}: 다운로드쿠폰 정액할인은 최소 10원 이상이어야 합니다 (현재: {discount})")
                         if discount % 10 != 0:
-                            raise ValueError(f"행 {row_idx}: 다운로드쿠폰 PRICE 할인금액은 10원 단위여야 합니다 (현재: {discount})")
+                            raise ValueError(f"행 {row_idx}: 다운로드쿠폰 정액할인은 10원 단위여야 합니다 (현재: {discount})")
                 elif coupon_type == '즉시할인':
                     # 즉시할인 쿠폰 검증 규칙
                     if discount_type == 'RATE':
                         # 정률할인: 1~100% 범위 체크 (100% 허용)
                         if not (1 <= discount <= 100):
-                            raise ValueError(f"행 {row_idx}: 즉시할인쿠폰 RATE 할인율은 1~100 사이여야 합니다 (현재: {discount})")
+                            raise ValueError(f"행 {row_idx}: 즉시할인쿠폰 정률할인은 1~100 사이여야 합니다 (현재: {discount})")
                     elif discount_type == 'PRICE':
                         # 정액할인: 1원 이상 체크 (10원 단위 제약 없음)
                         if discount < 1:
-                            raise ValueError(f"행 {row_idx}: 즉시할인쿠폰 PRICE 할인금액은 1원 이상이어야 합니다 (현재: {discount})")
+                            raise ValueError(f"행 {row_idx}: 즉시할인쿠폰 정액할인은 1원 이상이어야 합니다 (현재: {discount})")
                     elif discount_type == 'FIXED_WITH_QUANTITY':
                         # 수량할인: 1 이상 체크
                         if discount < 1:
-                            raise ValueError(f"행 {row_idx}: 즉시할인쿠폰 FIXED_WITH_QUANTITY 할인은 1 이상이어야 합니다 (현재: {discount})")
+                            raise ValueError(f"행 {row_idx}: 즉시할인쿠폰 수량별 정액할인은 1 이상이어야 합니다 (현재: {discount})")
 
                 # 8. 옵션ID (Column G): 쉼표로 구분된 vendor item ID 리스트 (필수)
                 vendor_items_raw = str(row[col_indices['옵션ID']]).strip()

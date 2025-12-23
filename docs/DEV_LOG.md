@@ -720,4 +720,42 @@ uv run python scripts/generate_example.py
 
 **참조**: [ADR 017](adr/017-coupon-type-specific-validation.md)
 
+### 할인방식 한글 입력 지원 (ADR 018)
+
+**목적**: 비전문가 사용자를 위한 한글 할인방식 입력 지원
+
+**변경사항**:
+- **Excel 입력**: 영어 코드(`RATE`, `PRICE`, `FIXED_WITH_QUANTITY`) → 한글(`정률할인`, `정액할인`, `수량별 정액할인`)
+- **내부 처리**: 한글 → 영어 자동 변환 (API 호출 시 영어 사용)
+- **에러 메시지**: 영어 → 한글로 변경
+
+**매핑 테이블**:
+| 한글 (엑셀 입력) | 영어 (내부 코드) |
+|---|---|
+| 정률할인 | RATE |
+| 수량별 정액할인 | FIXED_WITH_QUANTITY |
+| 정액할인 | PRICE |
+
+**구현 위치**:
+- [issuer.py:20-31](src/coupang_coupon_issuer/issuer.py#L20-L31) - 매핑 상수
+- [issuer.py:441-451](src/coupang_coupon_issuer/issuer.py#L441-L451) - 파싱 로직
+- [issuer.py:494,498,500,506,510,514](src/coupang_coupon_issuer/issuer.py) - 에러 메시지
+
+**Breaking Change**: 기존 영어 코드는 더 이상 지원되지 않음. 모든 엑셀 파일을 한글로 변경 필요.
+
+**마이그레이션 방법**:
+```bash
+# 예제 파일 재생성
+uv run python scripts/generate_example.py
+
+# 또는 수동 변경
+# RATE → 정률할인
+# PRICE → 정액할인
+# FIXED_WITH_QUANTITY → 수량별 정액할인
+```
+
+**테스트 결과**: 33 passed (유닛 테스트)
+
+**참조**: [ADR 018](adr/018-korean-discount-type-names.md)
+
 ---
