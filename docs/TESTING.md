@@ -14,17 +14,22 @@ tests/
 │   ├── sample_invalid_columns.xlsx
 │   ├── sample_invalid_rates.xlsx
 │   └── sample_invalid_prices.xlsx
-├── unit/                         # 유닛 테스트 (108개)
-│   ├── test_config.py            # CredentialManager 테스트 (18개)
-│   ├── test_coupang_api.py       # API 클라이언트 + HMAC (12개)
-│   ├── test_issuer.py            # 쿠폰 발급 로직 (32개)
-│   ├── test_service.py           # Cron 관리 (28개, Linux only)
-│   └── test_cli.py               # CLI 명령어 (18개)
-└── integration/                  # 통합 테스트 (20개, Docker 필요)
-    ├── conftest.py               # testcontainers fixture (207 라인)
-    ├── test_service_install.py   # 설치 프로세스 (11개)
-    ├── test_service_uninstall.py # 제거 프로세스 (6개)
-    └── test_end_to_end.py        # E2E 워크플로우 (3개)
+├── unit/                         # 유닛 테스트 (105개, 27개 skipped)
+│   ├── test_config.py            # ConfigManager 테스트 (25개)
+│   ├── test_coupang_api.py       # API 클라이언트 + HMAC (15개)
+│   ├── test_issuer.py            # 쿠폰 발급 로직 (31개)
+│   ├── test_jitter.py            # Jitter 스케줄러 (14개)
+│   ├── test_service.py           # Cron 관리 (27개, Linux only)
+│   └── test_cli.py               # CLI 명령어 (20개)
+├── integration/                  # 통합 테스트 (7개, 외부 API 모킹)
+│   ├── conftest.py               # Mock fixtures
+│   └── test_issue.py            # issue 기능 통합 테스트
+└── e2e/                         # E2E 테스트 (24개, Docker 필요)
+    ├── conftest.py               # Docker 인프라
+    ├── test_verify.py
+    ├── test_install.py
+    ├── test_issue.py
+    └── test_uninstall.py
 ```
 
 ## 실행 방법
@@ -85,7 +90,7 @@ uv run pytest -m "not slow"
 
 **유닛 테스트:**
 - service.py 테스트는 자동 스킵 (Linux 전용)
-- 예상 결과: 80/108 (28개 스킵)
+- 예상 결과: 105/105 (27개 스킵)
 
 ```bash
 uv run pytest tests/unit -v
@@ -103,7 +108,7 @@ uv run pytest tests/integration -v -m integration
 
 **유닛 테스트:**
 - 모든 테스트 실행 가능
-- 예상 결과: 108/108 통과
+- 예상 결과: 132/132 통과 (105 unit + 27 service)
 
 ```bash
 uv run pytest tests/unit -v
@@ -221,9 +226,10 @@ pytestmark = pytest.mark.skipif(os.name == 'nt', reason="Linux only")
 
 | 모듈 | 유닛 테스트 | 통합 테스트 | 상태 |
 |------|------------|------------|------|
-| config.py | 100% | - | ✅ |
-| coupang_api.py | 98% | - | ✅ |
-| issuer.py | 94% | - | ✅ |
+| config.py | 94% | - | ✅ |
+| coupang_api.py | 85% | - | ✅ |
+| issuer.py | 80% | - | ✅ |
+| jitter.py | 100% | - | ✅ |
 | cli (main.py) | - | 간접 검증 | ✅ |
 | service.py | Linux만 | 100% | ✅ |
 

@@ -23,7 +23,7 @@
 **위치**: `docs/adr/NNN-title.md`
 
 현재 ADR 목록:
-- [ADR 001: 엑셀 입력 구조](docs/adr/001-excel-structure.md) - ~~5개 컬럼 구조~~ (대체됨, ADR 009 참조)
+- [ADR 001: 엑셀 입력 구조](docs/adr/001-excel-structure.md) - ~~5개 컴럼 구조~~ (대체됨, ADR 009 참조)
 - [ADR 002: 입력 정규화](docs/adr/002-input-normalization.md) - 사용자 입력 오류 용인 로직
 - [ADR 003: API 인증](docs/adr/003-api-authentication.md) - HMAC-SHA256 서명 생성
 - [ADR 004: 고정 설정값](docs/adr/004-fixed-configuration-values.md) - contract_id, 예산 등
@@ -31,18 +31,19 @@
 - [ADR 006: contract_id=-1 무료 예산](docs/adr/006-contract-id-negative-one.md) - 무료 예산 사용
 - [ADR 007: 쿠폰 발급 워크플로우](docs/adr/007-coupon-issuance-workflow.md) - 다단계 비동기 처리
 - [ADR 008: CLI 구조 재설계](docs/adr/008-cli-restructuring.md) - ~~4개 명령어, 전역 명령어~~ (대체됨, ADR 014 참조)
-- [ADR 009: 엑셀 6컬럼 구조](docs/adr/009-excel-6-column-structure.md) - 할인금액/비율과 발급개수 분리
+- [ADR 009: 엑셀 6컴럼 구조](docs/adr/009-excel-6-column-structure.md) - ~~할인금액/비율과 발급개수 분리~~ (대체됨, ADR 015 참조)
 - [ADR 010: Crontab 기반 스케줄링](docs/adr/010-crontab-service.md) - ~~Cron 스케줄링, 사용자 수준 로그~~ (대체됨, ADR 014 참조)
 - [ADR 011: Jitter 기능](docs/adr/011-jitter-thundering-herd.md) - Thundering herd 방지
 - [ADR 012: XDG Base Directory](docs/adr/012-xdg-base-directory.md) - ~~XDG 표준 준수~~ (대체됨, ADR 014 참조)
 - [ADR 013: PyInstaller 단일 실행 파일 배포](docs/adr/013-pyinstaller-single-binary.md) - ~~PyInstaller 배포~~ (대체됨, ADR 014 참조)
 - [ADR 014: 스크립트 기반 배포](docs/adr/014-script-based-deployment.md) - **현재 구조**, Python 스크립트 배포, 런타임 경로 지정
+- [ADR 015: 옵션ID 컴럼 추가](docs/adr/015-option-id-column.md) - **현재 구조**, 7컴럼 엑셀 구조, vendor_items 필드
+- [ADR 016: 테스트 레이어 분리](docs/adr/016-test-layer-separation.md) - unit/integration/e2e 분리 전략
 
 ### 📝 문서 작성 규칙
 
 1. **기존 문서는 수정하지 않음**
    - 결정이 변경되면 새 ADR 작성
-   - 기존 문서에는 deprecation warning만 추가
 
 2. **DEV_LOG vs ADR 구분**
    - 작은 규칙/관례 → DEV_LOG.md
@@ -122,12 +123,14 @@ docs/
 │   ├── 006-contract-id-negative-one.md
 │   ├── 007-coupon-issuance-workflow.md
 │   ├── 008-cli-restructuring.md  # (대체됨)
-│   ├── 009-excel-6-column-structure.md
+│   ├── 009-excel-6-column-structure.md  # (대체됨)
 │   ├── 010-crontab-service.md  # (대체됨)
 │   ├── 011-jitter-thundering-herd.md
 │   ├── 012-xdg-base-directory.md  # (대체됨)
 │   ├── 013-pyinstaller-single-binary.md  # (대체됨)
-│   └── 014-script-based-deployment.md  # **현재 구조**
+│   ├── 014-script-based-deployment.md  # **현재 구조**
+│   ├── 015-option-id-column.md  # **현재 구조**
+│   └── 016-test-layer-separation.md
 └── coupang/                     # Coupang API 규격 문서
     ├── workflow.md
     ├── parameters-explained.md
@@ -320,7 +323,7 @@ cat ~/my-coupons/issuer.log | grep ERROR
 ### 핵심 기능
 - [x] API 클라이언트 (coupang_api.py)
 - [x] HMAC-SHA256 인증 구현
-- [x] 엑셀 I/O (6개 컬럼 + 입력 정규화)
+- [x] 엑셀 I/O (7개 컴럼 + 입력 정규화)
 - [x] issue() 메서드 실제 로직
 - [x] 고정값 설정 (예산, 유효기간, contract_id 등)
 - [x] 사용자 입력 오류 용인 로직
@@ -345,14 +348,15 @@ cat ~/my-coupons/issuer.log | grep ERROR
 
 ### 테스트
 - [x] 유닛 테스트 재작성 (pytest + requests-mock)
-  - **유닛 테스트**: ~115개
-  - **Windows 테스트 결과** (2024-12-21 - 스크립트 기반 마이그레이션):
-    - ✅ test_config.py: 26개 - ConfigManager + UUID + base_dir (100%) **[ADR 014 완료]**
-    - ✅ test_coupang_api.py: 12개 - HMAC 인증 (100%)
-    - ⏳ test_cli.py: 21개 - verify/issue/install/uninstall 명령어 **[작업 필요]**
-    - ⏳ test_issuer.py: 32개 - 쿠폰 발급 로직 **[작업 필요]**
-    - ⏳ test_service.py: 23개 - UUID 기반 cron 관리 (Linux only) **[작업 필요]**
-  - **커버리지**: config/api/issuer/service 94%+ (목표)
+  - **유닛 테스트**: 105개 (27개 skipped - Linux 전용)
+  - **테스트 결과** (2024-12-23 - ADR 015, 016 반영 완료):
+    - ✅ test_config.py: 25개 - ConfigManager + UUID + base_dir (100%) **[ADR 014 완료]**
+    - ✅ test_coupang_api.py: 15개 - HMAC 인증 (100%)
+    - ✅ test_cli.py: 20개 - verify/issue/install/uninstall 명령어 (100%) **[ADR 014, 015 완료]**
+    - ✅ test_issuer.py: 31개 - 쿠폰 발급 로직 (100%) **[ADR 015 완료]**
+    - ✅ test_jitter.py: 14개 - Jitter 스케줄러 (100%)
+    - ⏸️ test_service.py: 27개 - UUID 기반 cron 관리 (Linux only, skipped on Windows)
+  - **커버리지**: 68% (전체), config 94%, api 85%, issuer 80%, jitter 100%
   - **테스트 실행**: `uv run pytest tests/unit -v`
   - **커버리지 확인**: `uv run pytest --cov=src/coupang_coupon_issuer`
 
@@ -381,12 +385,15 @@ cat ~/my-coupons/issuer.log | grep ERROR
 
 ### 향후 작업 (ADR 014 마이그레이션)
 - [x] 핵심 코드 PyInstaller 제거 (config, main, service, issuer)
-- [x] test_config.py 업데이트 (26개)
+- [x] test_config.py 업데이트 (25개)
 - [x] ADR 014 문서화
+- [x] ADR 015 문서화 (옵션ID 컴럼)
+- [x] ADR 016 문서화 (테스트 레이어 분리)
+- [x] test_issuer.py 업데이트 (31개) - ADR 015 반영
+- [x] test_cli.py 업데이트 (20개) - ADR 014, 015 반영
+- [x] test_jitter.py 업데이트 (14개)
 - [x] CLAUDE.md 업데이트
-- [ ] test_issuer.py 업데이트 (~32개)
-- [ ] test_service.py 업데이트 (~23개)
-- [ ] test_cli.py 업데이트 (~21개)
+- [ ] test_service.py 업데이트 (~27개, Linux 환경 필요)
 - [ ] 통합 테스트 간소화 (PyInstaller 빌드 제거)
 - [ ] 수동 E2E 검증 (Ubuntu 22.04)
 - [ ] 성능 최적화 (병렬 처리, 선택사항)

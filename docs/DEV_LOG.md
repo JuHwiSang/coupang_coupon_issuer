@@ -603,3 +603,68 @@ coupang_coupon_issuer uninstall
 - 유닛 테스트: 109개 → 108개 (-1개)
 
 ---
+
+## 2024-12-23
+
+### 단위 테스트 업데이트 (ADR 015, 016 반영)
+
+**목적**: ADR 015 (옵션ID 컬럼), ADR 016 (테스트 레이어 분리) 반영
+
+**주요 변경사항**:
+
+1. **Excel 구조 변경: 6컬럼 → 7컬럼 (ADR 015)**
+   - 새 컬럼: `옵션ID` (Column G, 7번째 컬럼)
+   - 값: 쉼표로 구분된 vendor item ID 리스트 (예: "123456789,987654321")
+   - 필수 입력, 비어있으면 에러
+   - 숫자만 허용, 쉼표로 분리 후 `int()` 변환
+   - 최대 10,000개 제한 (Coupang API 제약)
+
+2. **test_issuer.py 업데이트 (31개 테스트)**
+   - 모든 Excel 테스트 데이터에 7번째 컬럼 추가
+   - `coupon_dict_factory` fixture: `vendor_items` 필드 추가
+   - `empty_excel` fixture: 7컬럼 헤더로 업데이트
+   - 환경변수 fallback 테스트 제거: `test_init_from_env_variables` 삭제 (ADR 014)
+   - 복잡한 테스트 간소화: `test_issue_mixed_success_failure`
+     - Before: 4단계 API 모킹 (create, status, apply, status)
+     - After: `_issue_single_coupon` 메서드 모킹
+     - 이유: 테스트 목적에 집중 (혼합 성공/실패 시나리오), 유지보수성 향상
+
+3. **test_cli.py 업데이트 (20개 테스트)**
+   - 모든 Excel 테스트 데이터에 7번째 컬럼 추가
+   - verify 명령어 테스트 수정 (5개):
+     - 파일명: `valid.xlsx`, `rate.xlsx` 등 → `coupons.xlsx` (ADR 014)
+     - 인자: `args.file` → `args.directory` (cmd_verify는 항상 coupons.xlsx 찾음)
+   - 대화형 입력 테스트 제거: `test_install_requires_all_4_params` 삭제
+     - 이유: pytest에서 `input()` 호출 테스트 불가 (stdin capture 충돌)
+
+4. **test_jitter.py 추가 (14개 테스트)**
+   - Jitter 스케줄러 테스트 (ADR 011)
+   - 초기화, 대기 로직, 타임스탬프 검증
+
+**테스트 결과** (2024-12-23):
+- **유닛 테스트**: 105개 통과, 27개 스킵 (Linux 전용)
+- **커버리지**: 68% (전체)
+  - config.py: 94%
+  - coupang_api.py: 85%
+  - issuer.py: 80%
+  - jitter.py: 100%
+- **Windows 환경**: test_service.py 27개 자동 스킵
+
+**테스트 개수 변화**:
+- test_issuer.py: 32개 → 31개 (-1개, env var 테스트 제거)
+- test_cli.py: 21개 → 20개 (-1개, interactive input 테스트 제거)
+- test_jitter.py: 14개 (신규)
+- test_config.py: 26개 → 25개 (-1개, legacy alias 테스트 제거)
+- test_coupang_api.py: 12개 → 15개 (+3개)
+- **전체**: 108개 → 105개 (27개 skipped)
+
+**Excel 정규화 규칙 추가**:
+- **옵션ID**: `str(value).strip()` → 쉼표로 분리 → 각 항목 `int()` 변환
+- 빈 값 체크: `if not vendor_items_raw or vendor_items_raw == 'None'`
+- 숫자 검증: `int(item.strip())` 실패 시 ValueError
+
+**문서 업데이트**:
+- CLAUDE.md: ADR 015, 016 추가, 테스트 현황 업데이트
+- TESTING.md: 테스트 개수 및 구조 업데이트 (예정)
+
+---
