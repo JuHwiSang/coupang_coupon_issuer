@@ -762,8 +762,8 @@ class TestIssuerEdgeCases:
 
         issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
 
-        # Mock load_workbook to return a workbook with no active sheet
-        with patch('coupang_coupon_issuer.issuer.load_workbook') as mock_load:
+        # Mock load_workbook in reader.py
+        with patch('coupang_coupon_issuer.reader.load_workbook') as mock_load:
             mock_wb = MagicMock()
             mock_wb.active = None
             mock_load.return_value = mock_wb

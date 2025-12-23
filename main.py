@@ -20,11 +20,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 from coupang_coupon_issuer.config import ConfigManager, get_excel_file
 from coupang_coupon_issuer.issuer import CouponIssuer
 from coupang_coupon_issuer.service import CrontabService
+from coupang_coupon_issuer.reader import fetch_coupons_from_excel, DISCOUNT_TYPE_EN_TO_KR
+from coupang_coupon_issuer.utils import kor_align, get_visual_width
 
 
 def cmd_verify(args) -> None:
     """엑셀 검증 및 전체 내용 출력 (테이블 형식)"""
-    from openpyxl import load_workbook
 
     # 파일 경로 결정: --file 옵션 > directory/coupons.xlsx
     if args.file:
@@ -39,69 +40,9 @@ def cmd_verify(args) -> None:
 
     print(f"엑셀 파일 검증 중: {excel_path}", flush=True)
 
-    # 엑셀 검증 (CouponIssuer 없이 직접 읽기)
+    # 엑셀 검증 (reader 모듈 사용)
     try:
-        workbook = load_workbook(excel_path, read_only=True)
-        sheet = workbook.active
-
-        if sheet is None:
-            raise ValueError("엑셀 시트를 찾을 수 없습니다")
-
-        # 헤더 읽기
-        headers_row = [cell.value for cell in sheet[1]]
-
-        # 필수 컬럼 체크
-        required_columns = ['쿠폰이름', '쿠폰타입', '쿠폰유효기간', '할인방식', '할인금액/비율', '발급개수']
-        for col in required_columns:
-            if col not in headers_row:
-                raise ValueError(f"필수 컬럼이 없습니다: {col}")
-
-        # 데이터 행 읽기
-        coupons = []
-        for row in sheet.iter_rows(min_row=2, values_only=True):
-            if not any(row):  # 빈 행 건너뛰기
-                continue
-
-            col_indices = {header: idx for idx, header in enumerate(headers_row)}
-
-            coupon_name = str(row[col_indices['쿠폰이름']]).strip()
-            coupon_type = str(row[col_indices['쿠폰타입']]).strip()
-            validity_days_raw = row[col_indices['쿠폰유효기간']]
-            discount_type = str(row[col_indices['할인방식']]).strip().upper()
-            discount_raw = row[col_indices['할인금액/비율']]
-            issue_count_raw = row[col_indices['발급개수']]
-
-            # 타입 변환 (openpyxl cell value 처리)
-            try:
-                validity_days = int(float(str(validity_days_raw))) if validity_days_raw else 0
-            except (ValueError, TypeError):
-                validity_days = 0
-
-            try:
-                discount = int(float(str(discount_raw))) if discount_raw else 0
-            except (ValueError, TypeError):
-                discount = 0
-
-            # 발급개수 처리
-            if coupon_type == '즉시할인':
-                issue_count = 0
-            else:
-                try:
-                    issue_count = int(float(str(issue_count_raw))) if issue_count_raw else 1
-                except (ValueError, TypeError):
-                    issue_count = 1
-
-            coupons.append({
-                'name': coupon_name,
-                'type': coupon_type,
-                'validity_days': validity_days,
-                'discount_type': discount_type,
-                'discount': discount,
-                'issue_count': issue_count
-            })
-
-        workbook.close()
-
+        coupons = fetch_coupons_from_excel(excel_path)
     except Exception as e:
         print(f"ERROR: 엑셀 로드 실패: {e}", flush=True)
         sys.exit(1)
@@ -115,10 +56,14 @@ def cmd_verify(args) -> None:
         "할인금액", "할인비율", "발급개수", "총 예산"
     ]
 
+    # 헤더 너비 설정
+    widths = [4, 25, 13, 10, 17, 10, 10, 10, 12]
+
     # 헤더 출력
-    header_line = "  ".join(f"{h:^12}" for h in headers)
+    header_line = "  ".join(kor_align(h, w, '>') for h, w in zip(headers, widths))
+    visual_width = get_visual_width(header_line)
     print(header_line)
-    print("=" * len(header_line))
+    print("-" * visual_width)
 
     # 각 쿠폰 출력
     for i, coupon in enumerate(coupons, 1):
@@ -127,30 +72,48 @@ def cmd_verify(args) -> None:
         discount = coupon['discount']
 
         if discount_type == 'RATE':
-            discount_amount = 0
-            discount_rate = discount
+            discount_amount_str = ""
+            discount_rate_str = f"{discount}%"
+            # 예산 계산용 수치
+            calc_discount_amount = 0
         else:  # PRICE, FIXED_WITH_QUANTITY
-            discount_amount = discount
-            discount_rate = 0
+            discount_amount_str = f"{discount:,}"
+            discount_rate_str = ""
+            # 예산 계산용 수치
+            calc_discount_amount = discount
 
-        issue_count = coupon['issue_count']
+        # 할인방식 한글 변환
+        discount_type_kr = DISCOUNT_TYPE_EN_TO_KR.get(discount_type, discount_type)
+
+        # 발급개수 처리 (즉시할인은 비워둠)
+        issue_count_val = coupon['issue_count']
+        if issue_count_val is None:
+            issue_count_str = ""
+            calc_issue_count = 0
+        else:
+            issue_count_str = f"{issue_count_val:,}"
+            calc_issue_count = issue_count_val
 
         # 예산 계산 (할인금액 × 발급개수)
-        budget = discount_amount * issue_count if discount_amount > 0 else 0
+        budget = calc_discount_amount * calc_issue_count if calc_discount_amount > 0 else 0
 
-        row = [
-            f"{i:^12}",
-            f"{coupon['name'][:10]:^12}",
-            f"{coupon['type'][:10]:^12}",
-            f"{coupon['validity_days']:^12}",
-            f"{discount_type[:10]:^12}",
-            f"{discount_amount:^12,}",
-            f"{discount_rate:^12}%",
-            f"{issue_count:^12,}",
-            f"{budget:^12,}원"
+        # 데이터 값 리스트
+        values = [
+            str(i),
+            coupon['name'][:10],
+            coupon['type'][:10],
+            str(coupon['validity_days']),
+            discount_type_kr[:10],
+            discount_amount_str,
+            discount_rate_str,
+            issue_count_str,
+            f"{budget:,}원"
         ]
+        
+        row = [kor_align(v, w, '>') for v, w in zip(values, widths)]
         print("  ".join(row))
 
+    print("-" * visual_width)
     print("\n검증 완료. 문제없이 발급 가능합니다.\n", flush=True)
 
 
