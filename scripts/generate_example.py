@@ -34,8 +34,9 @@ def add_header_comments(ws):
             "쿠폰의 유효 기간을 일(day) 단위로 입력하세요.\n\n"
             "예시:\n"
             "- 7 → 7일간 유효\n"
-            "- 30 → 30일간 유효\n\n"
-            "⚠ 숫자만 입력 (1~365)"
+            "- 30 → 30일간 유효\n"
+            "- 365 → 1년간 유효\n\n"
+            "⚠ 숫자만 입력 (1~9999)"
         ),
         
         'D1': (
@@ -105,18 +106,18 @@ def add_data_validations(ws):
     dv_coupon_type.add('B2:B1000')
     ws.add_data_validation(dv_coupon_type)
     
-    # Column C: 쿠폰유효기간 (1~365 정수)
+    # Column C: 쿠폰유효기간 (1~9999 정수)
     dv_validity = DataValidation(
         type="whole",
         operator="between",
         formula1=1,
-        formula2=365,
+        formula2=9999,
         allow_blank=False,
         showErrorMessage=True,
         errorTitle="입력 오류",
-        error="1~365 사이의 숫자를 입력하세요",
+        error="1~9999 사이의 숫자를 입력하세요",
         promptTitle="쿠폰유효기간",
-        prompt="유효기간을 일(day) 단위로 입력하세요 (1~365)"
+        prompt="유효기간을 일(day) 단위로 입력하세요 (1~9999)"
     )
     dv_validity.add('C2:C1000')
     ws.add_data_validation(dv_validity)
