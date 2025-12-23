@@ -667,4 +667,40 @@ coupang_coupon_issuer uninstall
 - CLAUDE.md: ADR 015, 016 추가, 테스트 현황 업데이트
 - TESTING.md: 테스트 개수 및 구조 업데이트 (예정)
 
+### 엑셀 예시 생성 스크립트 추가
+
+**목적**: 사용자가 엑셀 포맷을 쉽게 이해할 수 있도록 예제 파일 제공
+
+**생성된 파일**:
+- [scripts/generate_example.py](../scripts/generate_example.py) - 예제 생성 스크립트
+- [scripts/__init__.py](../scripts/__init__.py) - 패키지 초기화
+
+**사용법**:
+```bash
+uv run python scripts/generate_example.py
+```
+
+**출력** (`examples/` 디렉토리):
+- `basic.xlsx`: 기본 예제 (즉시할인 1개, 다운로드쿠폰 1개)
+- `comprehensive.xlsx`: 포괄적 예제 (모든 쿠폰 타입 × 할인 방식 조합 6개)
+- `edge_cases.xlsx`: 엣지 케이스 (최소/최대값, 다중 옵션 등 7개)
+
+**Excel 구조** (7컬럼, ADR 015):
+1. 쿠폰이름
+2. 쿠폰타입 (즉시할인 / 다운로드쿠폰)
+3. 쿠폰유효기간 (일 단위)
+4. 할인방식 (RATE / PRICE / FIXED_WITH_QUANTITY)
+5. 할인금액/비율
+6. 발급개수
+7. 옵션ID (쉼표로 구분)
+
+**헤더 스타일**: 굵게, 배경색 (#366092), 중앙 정렬, 컬럼 너비 자동 조정
+
+**예제 데이터 특징**:
+- 모든 데이터는 validation 규칙 통과
+- 옵션ID는 실제 사용 가능한 10자리 숫자 형식
+- 정률할인: 1~99% 범위
+- 정액할인: 10원 단위, 최소 10원
+- 수량할인: 최소 1개
+
 ---

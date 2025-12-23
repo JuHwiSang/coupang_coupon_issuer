@@ -111,6 +111,10 @@ src/coupang_coupon_issuer/
 ├── jitter.py                    # Jitter 스케줄러
 └── service.py                   # Cron 설치/제거
 
+# 스크립트
+scripts/
+└── generate_example.py          # 엑셀 예시 파일 생성 스크립트
+
 # 문서
 docs/
 ├── DEV_LOG.md                   # 작은 결정사항, 관례
@@ -135,6 +139,12 @@ docs/
     ├── workflow.md
     ├── parameters-explained.md
     └── (각종 API 문서)
+
+# 예시 파일
+examples/                        # 엑셀 예시 파일 (자동 생성)
+├── basic.xlsx                   # 기본 예제
+├── comprehensive.xlsx           # 전체 예제
+└── edge_cases.xlsx              # 엣지 케이스
 
 # 테스트
 tests/
@@ -545,14 +555,47 @@ def test_container(test_image):
 **ADR 014**: Python 스크립트로 직접 실행
 
 ```bash
-# 1. 프로젝트 클론
-git clone <repository>
+# 1. Clone repository
+git clone <repository-url>
 cd coupang_coupon_issuer
 
-# 2. 의존성 설치
-pip3 install -e .
-# 또는
-pip3 install requests openpyxl
+# 2. Install dependencies (uv)
+uv sync
+
+# 3. 개발 모드 실행
+uv run python main.py verify tests/fixtures/
+uv run python main.py issue tests/fixtures/
+
+# 4. 엑셀 예시 생성 (선택사항)
+uv run python scripts/generate_example.py
+# → examples/ 디렉토리에 3개 예제 파일 생성
+#    - basic.xlsx: 기본 예제 (2개 쿠폰)
+#    - comprehensive.xlsx: 전체 예제 (6개 쿠폰)
+#    - edge_cases.xlsx: 엣지 케이스 (7개 쿠폰)
+```
+
+### 엑셀 예시 파일 생성
+
+프로젝트에는 엑셀 포맷 예시를 생성하는 스크립트가 포함되어 있습니다:
+
+```bash
+# 예제 파일 생성
+uv run python scripts/generate_example.py
+```
+
+생성되는 파일 (`examples/` 디렉토리):
+- **basic.xlsx**: 즉시할인/다운로드쿠폰 기본 예제 2개
+- **comprehensive.xlsx**: 모든 쿠폰 타입과 할인 방식 조합 6개
+- **edge_cases.xlsx**: 최소/최대값, 다중 옵션 등 7개
+
+각 Excel 파일은 7개 컬럼 구조를 따릅니다 (ADR 015):
+1. 쿠폰이름
+2. 쿠폰타입 (즉시할인 / 다운로드쿠폰)
+3. 쿠폰유효기간 (일 단위)
+4. 할인방식 (RATE / PRICE / FIXED_WITH_QUANTITY)
+5. 할인금액/비율
+6. 발급개수
+7. 옵션ID (쉼표로 구분)
 
 # 3. 작업 디렉토리 생성
 mkdir ~/my-coupons
