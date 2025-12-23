@@ -88,8 +88,14 @@ cp /path/to/coupons.xlsx ~/my-coupons/
 ### 4. 엑셀 검증
 
 ```bash
-# 엑셀 파일 검증 및 전체 내용 확인 (테이블 형식)
+# 기본: directory의 coupons.xlsx 검증
 python3 main.py verify ~/my-coupons
+
+# 특정 파일 검증 (--file 옵션)
+python3 main.py verify --file ~/my-coupons/custom.xlsx
+
+# 현재 디렉토리에서 특정 파일 검증
+python3 main.py verify --file ./test.xlsx
 ```
 
 **출력 예시**:

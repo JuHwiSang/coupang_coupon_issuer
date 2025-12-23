@@ -200,6 +200,14 @@ python3 main.py verify [디렉토리]
 # 예시:
 python3 main.py verify .              # 현재 디렉토리의 coupons.xlsx
 python3 main.py verify ~/my-coupons   # ~/my-coupons/coupons.xlsx
+
+# 1-1. 특정 파일 검증 (--file 옵션)
+python3 main.py verify --file [파일경로]
+# 예시:
+python3 main.py verify --file ~/my-coupons/custom.xlsx  # 특정 파일 지정
+python3 main.py verify --file ./test.xlsx                # 현재 디렉토리의 test.xlsx
+# 주의: --file 옵션은 directory보다 우선함
+python3 main.py verify ~/my-coupons --file ./custom.xlsx  # custom.xlsx 사용
 # → 9개 컬럼 (쿠폰이름, 쿠폰타입, 유효기간, 할인방식, 할인금액, 할인비율, 발급개수, 총 예산) 출력
 
 # 2. 단발성 쿠폰 발급 (테스트용)

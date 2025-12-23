@@ -31,6 +31,7 @@ class TestVerifyCommand:
         # Create args object
         args = MagicMock()
         args.directory = str(tmp_path)
+        args.file = None
 
         # Run command
         main.cmd_verify(args)
@@ -95,6 +96,7 @@ class TestVerifyCommand:
 
         args = MagicMock()
         args.directory = str(tmp_path)
+        args.file = None
 
         with pytest.raises(SystemExit):
             main.cmd_verify(args)
@@ -115,6 +117,7 @@ class TestVerifyCommand:
 
         args = MagicMock()
         args.directory = str(tmp_path)
+        args.file = None
 
         main.cmd_verify(args)
 
@@ -134,6 +137,7 @@ class TestVerifyCommand:
 
         args = MagicMock()
         args.directory = str(tmp_path)
+        args.file = None
 
         main.cmd_verify(args)
 
@@ -154,11 +158,96 @@ class TestVerifyCommand:
 
         args = MagicMock()
         args.directory = str(tmp_path)
+        args.file = None
 
         main.cmd_verify(args)
 
         captured = capsys.readouterr()
         assert "50,000" in captured.out  # 500 × 100 = 50,000
+
+    def test_verify_with_file_option(self, tmp_path, capsys):
+        """--file option should verify the specified file"""
+        excel_file = tmp_path / "custom.xlsx"
+        wb = Workbook()
+        ws = wb.active
+        assert ws is not None
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
+        ws.append(["커스텀쿠폰", "즉시할인", 30, "RATE", 10, "", "123456789"])
+        wb.save(excel_file)
+
+        args = MagicMock()
+        args.directory = None
+        args.file = str(excel_file)
+
+        main.cmd_verify(args)
+
+        captured = capsys.readouterr()
+        assert "1개 쿠폰 로드 완료" in captured.out
+        assert "커스텀쿠폰" in captured.out
+
+    def test_verify_file_option_overrides_directory(self, tmp_path, capsys):
+        """--file option should take priority over directory"""
+        # Create coupons.xlsx in directory
+        default_file = tmp_path / "coupons.xlsx"
+        wb1 = Workbook()
+        ws1 = wb1.active
+        assert ws1 is not None
+        ws1.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
+        ws1.append(["기본쿠폰", "즉시할인", 30, "RATE", 10, "", "123456789"])
+        wb1.save(default_file)
+
+        # Create custom.xlsx in another location
+        custom_file = tmp_path / "custom.xlsx"
+        wb2 = Workbook()
+        ws2 = wb2.active
+        assert ws2 is not None
+        ws2.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
+        ws2.append(["커스텀쿠폰", "다운로드쿠폰", 15, "PRICE", 500, 100, "987654321"])
+        wb2.save(custom_file)
+
+        args = MagicMock()
+        args.directory = str(tmp_path)  # Points to coupons.xlsx
+        args.file = str(custom_file)    # Should override
+
+        main.cmd_verify(args)
+
+        captured = capsys.readouterr()
+        assert "커스텀쿠폰" in captured.out  # Should use --file
+        assert "기본쿠폰" not in captured.out  # Should NOT use directory
+
+    def test_verify_file_option_with_nonexistent_file(self, tmp_path, capsys):
+        """--file option with non-existent file should error"""
+        args = MagicMock()
+        args.directory = None
+        args.file = str(tmp_path / "nonexistent.xlsx")
+
+        with pytest.raises(SystemExit):
+            main.cmd_verify(args)
+
+        captured = capsys.readouterr()
+        assert "ERROR" in captured.out
+        assert "찾을 수 없습니다" in captured.out
+
+    def test_verify_file_option_with_custom_filename(self, tmp_path, capsys):
+        """--file option should work with any filename"""
+        excel_file = tmp_path / "my_special_coupons.xlsx"
+        wb = Workbook()
+        ws = wb.active
+        assert ws is not None
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
+        ws.append(["특별쿠폰", "즉시할인", 30, "RATE", 5, "", "123456789"])
+        wb.save(excel_file)
+
+        args = MagicMock()
+        args.directory = None
+        args.file = str(excel_file)
+
+        main.cmd_verify(args)
+
+        captured = capsys.readouterr()
+        assert "1개 쿠폰 로드 완료" in captured.out
+        assert "특별쿠폰" in captured.out
+
 
 
 @pytest.mark.unit

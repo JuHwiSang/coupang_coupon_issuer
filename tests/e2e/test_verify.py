@@ -89,3 +89,79 @@ wb.save('{clean_install_dir}/coupons.xlsx')
         assert exit_code != 0
         assert "ERROR" in output
         assert "필수 컬럼이 없습니다" in output
+
+    def test_verify_with_file_option(self, python_script, clean_install_dir, container_exec):
+        """--file option should verify the specified file"""
+        # Create custom.xlsx
+        create_custom_excel = f"""
+import openpyxl
+wb = openpyxl.Workbook()
+ws = wb.active
+ws.append(['쿠폰이름', '쿠폰타입', '쿠폰유효기간', '할인방식', '할인금액/비율', '발급개수', '옵션ID'])
+ws.append(['커스텀쿠폰', '즉시할인', 30, 'RATE', 10, '', '123456789'])
+wb.save('{clean_install_dir}/custom.xlsx')
+"""
+        container_exec(f"python3 -c \"{create_custom_excel}\"", check=True)
+
+        exit_code, output = container_exec(
+            f"python3 {python_script} verify --file {clean_install_dir}/custom.xlsx"
+        )
+
+        assert exit_code == 0
+        assert "1개 쿠폰 로드 완료" in output
+        assert "커스텀쿠폰" in output
+
+    def test_verify_file_option_priority(self, python_script, clean_install_dir, container_exec):
+        """--file option should take priority over directory"""
+        # Create coupons.xlsx (default)
+        create_default_excel = f"""
+import openpyxl
+wb = openpyxl.Workbook()
+ws = wb.active
+ws.append(['쿠폰이름', '쿠폰타입', '쿠폰유효기간', '할인방식', '할인금액/비율', '발급개수', '옵션ID'])
+ws.append(['기본쿠폰', '즉시할인', 30, 'RATE', 10, '', '123456789'])
+wb.save('{clean_install_dir}/coupons.xlsx')
+"""
+        container_exec(f"python3 -c \"{create_default_excel}\"", check=True)
+
+        # Create custom.xlsx
+        create_custom_excel = f"""
+import openpyxl
+wb = openpyxl.Workbook()
+ws = wb.active
+ws.append(['쿠폰이름', '쿠폰타입', '쿠폰유효기간', '할인방식', '할인금액/비율', '발급개수', '옵션ID'])
+ws.append(['커스텀쿠폰', '다운로드쿠폰', 15, 'PRICE', 500, 100, '987654321'])
+wb.save('{clean_install_dir}/custom.xlsx')
+"""
+        container_exec(f"python3 -c \"{create_custom_excel}\"", check=True)
+
+        # Test: --file should override directory
+        exit_code, output = container_exec(
+            f"python3 {python_script} verify {clean_install_dir} --file {clean_install_dir}/custom.xlsx"
+        )
+
+        assert exit_code == 0
+        assert "커스텀쿠폰" in output  # Should use --file
+        assert "기본쿠폰" not in output  # Should NOT use directory
+
+    def test_verify_custom_filename(self, python_script, clean_install_dir, container_exec):
+        """--file option should work with any filename"""
+        # Create file with custom name
+        create_custom_excel = f"""
+import openpyxl
+wb = openpyxl.Workbook()
+ws = wb.active
+ws.append(['쿠폰이름', '쿠폰타입', '쿠폰유효기간', '할인방식', '할인금액/비율', '발급개수', '옵션ID'])
+ws.append(['특별쿠폰', '즉시할인', 30, 'RATE', 5, '', '123456789'])
+wb.save('{clean_install_dir}/my_special_coupons.xlsx')
+"""
+        container_exec(f"python3 -c \"{create_custom_excel}\"", check=True)
+
+        exit_code, output = container_exec(
+            f"python3 {python_script} verify --file {clean_install_dir}/my_special_coupons.xlsx"
+        )
+
+        assert exit_code == 0
+        assert "1개 쿠폰 로드 완료" in output
+        assert "특별쿠폰" in output
+

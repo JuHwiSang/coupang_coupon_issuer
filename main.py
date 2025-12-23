@@ -26,8 +26,12 @@ def cmd_verify(args) -> None:
     """엑셀 검증 및 전체 내용 출력 (테이블 형식)"""
     from openpyxl import load_workbook
 
-    base_dir = Path(args.directory).resolve() if args.directory else Path.cwd()
-    excel_path = get_excel_file(base_dir)  # 항상 coupons.xlsx 사용
+    # 파일 경로 결정: --file 옵션 > directory/coupons.xlsx
+    if args.file:
+        excel_path = Path(args.file).resolve()
+    else:
+        base_dir = Path(args.directory).resolve() if args.directory else Path.cwd()
+        excel_path = get_excel_file(base_dir)
 
     if not excel_path.exists():
         print(f"ERROR: {excel_path} 파일을 찾을 수 없습니다", flush=True)
@@ -281,6 +285,11 @@ def main() -> None:
         nargs="?",
         default=None,
         help="작업 디렉토리 (기본: 현재 디렉토리)"
+    )
+    verify_parser.add_argument(
+        "--file",
+        type=str,
+        help="검증할 엑셀 파일 경로 (기본: {directory}/coupons.xlsx)"
     )
 
     # issue 서브파서
