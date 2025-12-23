@@ -278,17 +278,17 @@ class TestInputNormalization:
 class TestValidation:
     """Test validation rules"""
 
-    def test_validate_rate_range_1_to_99(self, tmp_path):
-        """RATE discount must be between 1-99"""
+    def test_validate_download_coupon_rate_range_1_to_99(self, tmp_path):
+        """Download coupon RATE must be between 1-99 (100 not allowed)"""
         # Valid cases
         excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
         ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "즉시할인", 30, "RATE", 1, "", "123456789"])
-        ws.append(["쿠폰2", "즉시할인", 30, "RATE", 50, "", "123456789"])
-        ws.append(["쿠폰3", "즉시할인", 30, "RATE", 99, "", "123456789"])
+        ws.append(["쿠폰1", "다운로드쿠폰", 30, "RATE", 1, 100, "123456789"])
+        ws.append(["쿠폰2", "다운로드쿠폰", 30, "RATE", 50, 100, "123456789"])
+        ws.append(["쿠폰3", "다운로드쿠폰", 30, "RATE", 99, 100, "123456789"])
         wb.save(excel_file)
 
         issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
@@ -302,7 +302,7 @@ class TestValidation:
         ws = wb.active
         assert ws is not None
         ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "즉시할인", 30, "RATE", 0, "", "123456789"])
+        ws.append(["쿠폰1", "다운로드쿠폰", 30, "RATE", 0, 100, "123456789"])
         wb.save(excel_file)
 
         with pytest.raises(ValueError) as exc_info:
@@ -310,29 +310,61 @@ class TestValidation:
         # 0 value triggers the general "> 0" validation before RATE-specific validation
         assert "할인금액/비율은 0보다 커야 합니다" in str(exc_info.value)
 
-        # Invalid: 100%
+        # Invalid: 100% (download coupon doesn't allow 100)
         excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
         ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "즉시할인", 30, "RATE", 100, "", "123456789"])
+        ws.append(["쿠폰1", "다운로드쿠폰", 30, "RATE", 100, 100, "123456789"])
         wb.save(excel_file)
 
         with pytest.raises(ValueError) as exc_info:
             issuer._fetch_coupons_from_excel()
-        assert "RATE 할인율은 1~99 사이여야 합니다" in str(exc_info.value)
+        assert "다운로드쿠폰 RATE 할인율은 1~99 사이여야 합니다" in str(exc_info.value)
 
-    def test_validate_price_minimum_10_won(self, tmp_path):
-        """PRICE discount must be >= 10 won"""
+    def test_validate_instant_coupon_rate_range_1_to_100(self, tmp_path):
+        """Instant coupon RATE can be 1-100 (100 allowed)"""
+        # Valid cases including 100%
+        excel_file = tmp_path / "coupons.xlsx"
+        wb = Workbook()
+        ws = wb.active
+        assert ws is not None
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
+        ws.append(["쿠폰1", "즉시할인", 30, "RATE", 1, "", "123456789"])
+        ws.append(["쿠폰2", "즉시할인", 30, "RATE", 50, "", "123456789"])
+        ws.append(["쿠폰3", "즉시할인", 30, "RATE", 99, "", "123456789"])
+        ws.append(["쿠폰4", "즉시할인", 30, "RATE", 100, "", "123456789"])  # 100% allowed for instant
+        wb.save(excel_file)
+
+        issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
+
+        coupons = issuer._fetch_coupons_from_excel()
+        assert len(coupons) == 4  # All valid including 100%
+
+        # Invalid: 101%
+        excel_file = tmp_path / "coupons.xlsx"
+        wb = Workbook()
+        ws = wb.active
+        assert ws is not None
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
+        ws.append(["쿠폰1", "즉시할인", 30, "RATE", 101, "", "123456789"])
+        wb.save(excel_file)
+
+        with pytest.raises(ValueError) as exc_info:
+            issuer._fetch_coupons_from_excel()
+        assert "즉시할인쿠폰 RATE 할인율은 1~100 사이여야 합니다" in str(exc_info.value)
+
+    def test_validate_download_coupon_price_minimum_10_won(self, tmp_path):
+        """Download coupon PRICE must be >= 10 won and in 10-won units"""
         # Valid
         excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
         ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "즉시할인", 30, "PRICE", 10, "", "123456789"])
-        ws.append(["쿠폰2", "즉시할인", 30, "PRICE", 100, "", "123456789"])
+        ws.append(["쿠폰1", "다운로드쿠폰", 30, "PRICE", 10, 100, "123456789"])
+        ws.append(["쿠폰2", "다운로드쿠폰", 30, "PRICE", 100, 100, "123456789"])
         wb.save(excel_file)
 
         issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
@@ -346,24 +378,24 @@ class TestValidation:
         ws = wb.active
         assert ws is not None
         ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "즉시할인", 30, "PRICE", 5, "", "123456789"])
+        ws.append(["쿠폰1", "다운로드쿠폰", 30, "PRICE", 5, 100, "123456789"])
         wb.save(excel_file)
 
         with pytest.raises(ValueError) as exc_info:
             issuer._fetch_coupons_from_excel()
-        assert "PRICE 할인금액은 최소 10원 이상이어야 합니다" in str(exc_info.value)
+        assert "다운로드쿠폰 PRICE 할인금액은 최소 10원 이상이어야 합니다" in str(exc_info.value)
 
-    def test_validate_price_10_won_units(self, tmp_path):
-        """PRICE discount must be in 10-won units"""
+    def test_validate_download_coupon_price_10_won_units(self, tmp_path):
+        """Download coupon PRICE must be in 10-won units"""
         # Valid
         excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
         ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "즉시할인", 30, "PRICE", 10, "", "123456789"])
-        ws.append(["쿠폰2", "즉시할인", 30, "PRICE", 20, "", "123456789"])
-        ws.append(["쿠폰3", "즉시할인", 30, "PRICE", 100, "", "123456789"])
+        ws.append(["쿠폰1", "다운로드쿠폰", 30, "PRICE", 10, 100, "123456789"])
+        ws.append(["쿠폰2", "다운로드쿠폰", 30, "PRICE", 20, 100, "123456789"])
+        ws.append(["쿠폰3", "다운로드쿠폰", 30, "PRICE", 100, 100, "123456789"])
         wb.save(excel_file)
 
         issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
@@ -377,12 +409,45 @@ class TestValidation:
         ws = wb.active
         assert ws is not None
         ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "즉시할인", 30, "PRICE", 15, "", "123456789"])
+        ws.append(["쿠폰1", "다운로드쿠폰", 30, "PRICE", 15, 100, "123456789"])
         wb.save(excel_file)
 
         with pytest.raises(ValueError) as exc_info:
             issuer._fetch_coupons_from_excel()
-        assert "PRICE 할인금액은 10원 단위여야 합니다" in str(exc_info.value)
+        assert "다운로드쿠폰 PRICE 할인금액은 10원 단위여야 합니다" in str(exc_info.value)
+
+    def test_validate_instant_coupon_price_minimum_1_won(self, tmp_path):
+        """Instant coupon PRICE must be >= 1 won (no 10-won unit requirement)"""
+        # Valid cases including non-10-won units
+        excel_file = tmp_path / "coupons.xlsx"
+        wb = Workbook()
+        ws = wb.active
+        assert ws is not None
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
+        ws.append(["쿠폰1", "즉시할인", 30, "PRICE", 1, "", "123456789"])
+        ws.append(["쿠폰2", "즉시할인", 30, "PRICE", 5, "", "123456789"])  # 5 won allowed
+        ws.append(["쿠폰3", "즉시할인", 30, "PRICE", 15, "", "123456789"])  # 15 won allowed
+        ws.append(["쿠폰4", "즉시할인", 30, "PRICE", 123, "", "123456789"])  # 123 won allowed
+        wb.save(excel_file)
+
+        issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
+
+        coupons = issuer._fetch_coupons_from_excel()
+        assert len(coupons) == 4  # All valid
+
+        # Invalid: 0 won
+        excel_file = tmp_path / "coupons.xlsx"
+        wb = Workbook()
+        ws = wb.active
+        assert ws is not None
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
+        ws.append(["쿠폰1", "즉시할인", 30, "PRICE", 0, "", "123456789"])
+        wb.save(excel_file)
+
+        with pytest.raises(ValueError) as exc_info:
+            issuer._fetch_coupons_from_excel()
+        # 0 triggers general validation first
+        assert "할인금액/비율은 0보다 커야 합니다" in str(exc_info.value)
 
 
 @pytest.mark.unit

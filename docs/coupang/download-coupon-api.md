@@ -57,7 +57,7 @@ https://api-gateway.coupang.com/v2/providers/marketplace_openapi/apis/api/v1/cou
 | `typeOfDiscount` | String | 쿠폰 정책유형<br/>`RATE`: 정률할인<br/>`PRICE`: 정액할인 |
 | `description` | String | 쿠폰 상세 설명<br/>장바구니에서 쿠폰정책 명칭의 부연설명으로 표시 |
 | `minimumPrice` | Number | 쿠폰 적용 최소구매금액<br/>쿠폰을 사용하기 위해 충족해야하는 주문금액 |
-| `discount` | Number | 쿠폰 할인금액 또는 비율(%)<br/>`RATE`: 1~99 정수입력<br/>`PRICE`: 10원 단위 금액 |
+| `discount` | Number | 쿠폰 할인금액 또는 비율(%)<br/>`RATE`: 1~99 정수입력 (100은 불가)<br/>`PRICE`: 10원 단위 금액 (최소 10원 이상) |
 | `maximumDiscountPrice` | Number | 최대 할인 금액<br/>`typeOfDiscount`가 `RATE`일 때 유효<br/>`PRICE`일 때는 임의의 숫자 입력 |
 | `maximumPerDaily` | Number | 최대 발급 개수(1인/1일)<br/>9,999 초과 입력 불가 |
 

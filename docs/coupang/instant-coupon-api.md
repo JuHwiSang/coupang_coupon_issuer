@@ -47,7 +47,7 @@ https://api-gateway.coupang.com/v2/providers/fms/apis/api/v2/vendors/A00012345/c
 | `contractId` | O | Number | 업체의 계약서ID |
 | `name` | O | String | 프로모션명 (최대 45자) |
 | `maxDiscountPrice` | O | Number | 최대할인금액<br/>최소 10원 이상 |
-| `discount` | O | Number | 할인률 |
+| `discount` | O | Number | 할인금액 또는 할인률<br/>`RATE`: 1~100 (퍼센트)<br/>`PRICE`: 1 이상 (원)<br/>`FIXED_WITH_QUANTITY`: 1 이상 |
 | `startAt` | O | String | 유효시작일<br/>유효시작일은 다음날 00시부터 작동하도록 설정 가능<br/>예: 8월4일 15시에 쿠폰을 생성한다면 8월5일00시 부터 쿠폰이 적용되도록 생성 |
 | `endAt` | O | String | 유효종료일 |
 | `type` | O | String | 할인방식<br/>`RATE` (정률할인)<br/>`FIXED_WITH_QUANTITY` (수량별 정액할인)<br/>`PRICE` (정액할인) |

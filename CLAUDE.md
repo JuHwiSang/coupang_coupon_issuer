@@ -39,6 +39,7 @@
 - [ADR 014: 스크립트 기반 배포](docs/adr/014-script-based-deployment.md) - **현재 구조**, Python 스크립트 배포, 런타임 경로 지정
 - [ADR 015: 옵션ID 컴럼 추가](docs/adr/015-option-id-column.md) - **현재 구조**, 7컴럼 엑셀 구조, vendor_items 필드
 - [ADR 016: 테스트 레이어 분리](docs/adr/016-test-layer-separation.md) - unit/integration/e2e 분리 전략
+- [ADR 017: 쿠폰 타입별 할인 검증 규칙 분리](docs/adr/017-coupon-type-specific-validation.md) - 다운로드/즉시할인 쿠폰 검증 분리
 
 ### 📝 문서 작성 규칙
 
