@@ -2,7 +2,9 @@
 """엑셀 예시 파일 생성 스크립트
 
 사용법:
-    uv run generate-examples
+    python scripts/generate_example.py
+    # 또는
+    uv run python scripts/generate_example.py
 """
 
 from pathlib import Path
