@@ -63,16 +63,18 @@
 - **패키지**: requests, openpyxl
 - **개발 도구**: uv (패키지 관리)
 
-### 배포 환경 (스크립트 기반)
+### 배포 환경 (하이브리드)
 - **OS**: Linux (cron 필요)
 - **Python**: 3.10+ 필수
 - **의존성**: requests, openpyxl 필요
+- **배포 방식**: Python 스크립트 또는 PyInstaller 바이너리 (자동 감지)
 
 ### CI/CD 환경
 - **GitHub Actions**: 자동 빌드 워크플로우
 - **빌드 도구**: uv + PyInstaller
 - **타겟 플랫폼**: Linux (ubuntu-latest)
 - **Artifact**: `coupang_coupon_issuer` 바이너리 (30일 보관)
+- **실행 모드 감지**: `is_pyinstaller()` 유틸리티로 자동 감지
 
 ### 지원 배포판
 
@@ -116,10 +118,10 @@ src/coupang_coupon_issuer/
 ├── config.py                    # ConfigManager, 경로 해결 함수들
 ├── coupang_api.py               # Coupang API 클라이언트 (HMAC-SHA256)
 ├── reader.py                    # 엑셀 파일 읽기 및 검증 (공통 모듈)
-├── utils.py                     # 한글 너비 고려 정렬 유틸리티
+├── utils.py                     # 한글 정렬 + PyInstaller 감지 유틸리티
 ├── issuer.py                    # 쿠폰 발급 로직
 ├── jitter.py                    # Jitter 스케줄러
-└── service.py                   # Cron 설치/제거
+└── service.py                   # Cron 설치/제거 (PyInstaller 자동 감지)
 
 # 스크립트
 scripts/
@@ -161,11 +163,11 @@ examples/                        # 엑셀 예시 파일 (자동 생성)
 # 테스트
 tests/
 ├── conftest.py                  # 공통 fixture (간소화됨)
-├── unit/                        # 유닛 테스트 (~143개)
+├── unit/                        # 유닛 테스트 (~147개)
 │   ├── test_config.py           # ConfigManager (26개)
 │   ├── test_coupang_api.py      # API 클라이언트 (12개)
 │   ├── test_reader.py           # 엑셀 읽기/검증 (20개)
-│   ├── test_utils.py            # 한글 정렬 유틸리티 (17개)
+│   ├── test_utils.py            # 한글 정렬 + PyInstaller 감지 (21개)
 │   ├── test_issuer.py           # 쿠폰 발급 로직 (32개)
 │   ├── test_service.py          # Cron 관리 (23개, Linux only)
 │   └── test_cli.py              # CLI 명령어 (21개)
@@ -278,6 +280,15 @@ tail -f ~/my-coupons/issuer.log       # 로그 확인
 - 안전한 폴링 루프 (1초 간격, KeyboardInterrupt 처리)
 - 시작/종료 시점만 로그 출력
 
+**PyInstaller 하이브리드 지원 (2024-12-24)**:
+- **자동 감지**: `is_pyinstaller()` 유틸리티로 실행 환경 자동 감지
+- **이중 모드**: Python 스크립트 또는 PyInstaller 바이너리 모두 지원
+- **감지 로직**: `sys.frozen` AND `sys._MEIPASS` 체크 (더 정확한 감지)
+- **Cron 등록**:
+  - PyInstaller 모드: `/path/to/coupang_coupon_issuer issue /work/dir`
+  - 스크립트 모드: `python3 /path/to/main.py issue /work/dir`
+- **투명성**: 사용자는 실행 방식을 신경 쓸 필요 없음
+
 ### 경로 해결 전략 (base_dir 파라미터 전달)
 
 **ADR 014**: 함수 기반 경로 해결, base_dir를 명시적으로 전달
@@ -380,15 +391,17 @@ cat ~/my-coupons/issuer.log | grep ERROR
 
 ### 테스트
 - [x] 유닛 테스트 재작성 (pytest + requests-mock)
-  - **유닛 테스트**: 105개 (27개 skipped - Linux 전용)
-  - **테스트 결과** (2024-12-23 - ADR 015, 016 반영 완료):
-    - ✅ test_config.py: 25개 - ConfigManager + UUID + base_dir (100%) **[ADR 014 완료]**
-    - ✅ test_coupang_api.py: 15개 - HMAC 인증 (100%)
-    - ✅ test_cli.py: 20개 - verify/issue/install/uninstall 명령어 (100%) **[ADR 014, 015 완료]**
-    - ✅ test_issuer.py: 31개 - 쿠폰 발급 로직 (100%) **[ADR 015 완료]**
+  - **유닛 테스트**: 151개 (27개 skipped - Linux 전용)
+  - **테스트 결과** (2024-12-24 - PyInstaller 감지 유틸리티 추가):
+    - ✅ test_config.py: 26개 - ConfigManager + UUID + base_dir (100%) **[ADR 014 완료]**
+    - ✅ test_coupang_api.py: 12개 - HMAC 인증 (100%)
+    - ✅ test_reader.py: 20개 - 엑셀 읽기/검증 (100%)
+    - ✅ test_utils.py: 21개 - 한글 정렬 + **PyInstaller 감지** (100%) **[신규]**
+    - ✅ test_issuer.py: 32개 - 쿠폰 발급 로직 (100%) **[ADR 015 완료]**
     - ✅ test_jitter.py: 14개 - Jitter 스케줄러 (100%)
+    - ✅ test_cli.py: 21개 - verify/issue/install/uninstall 명령어 (100%) **[ADR 014, 015 완료]**
     - ⏸️ test_service.py: 27개 - UUID 기반 cron 관리 (Linux only, skipped on Windows)
-  - **커버리지**: 68% (전체), config 94%, api 85%, issuer 80%, jitter 100%
+  - **커버리지**: 68% (전체), config 94%, api 85%, issuer 80%, jitter 100%, **utils 100%**
   - **테스트 실행**: `uv run pytest tests/unit -v`
   - **커버리지 확인**: `uv run pytest --cov=src/coupang_coupon_issuer`
 
@@ -414,19 +427,24 @@ cat ~/my-coupons/issuer.log | grep ERROR
     - ~~첫 실행 (PyInstaller 빌드): 약 6-7분~~ → 첫 실행: 약 1-2분
     - 이후 실행: 약 1-2분 (96개 테스트)
   - **E2E 검증**: 수동 테스트로 대체 (Ubuntu 22.04)
+  - ⚠️ **알려진 이슈**: verify/issue 명령어 integration/e2e 테스트 오류 (향후 수정 예정)
 
-### 향후 작업 (ADR 014 마이그레이션)
+### 향후 작업
 - [x] 핵심 코드 PyInstaller 제거 (config, main, service, issuer)
-- [x] test_config.py 업데이트 (25개)
+- [x] test_config.py 업데이트 (26개)
+- [x] test_utils.py 업데이트 (21개) - **PyInstaller 감지 유틸리티 추가**
 - [x] ADR 014 문서화
 - [x] ADR 015 문서화 (옵션ID 컴럼)
 - [x] ADR 016 문서화 (테스트 레이어 분리)
-- [x] test_issuer.py 업데이트 (31개) - ADR 015 반영
-- [x] test_cli.py 업데이트 (20개) - ADR 014, 015 반영
+- [x] test_issuer.py 업데이트 (32개) - ADR 015 반영
+- [x] test_cli.py 업데이트 (21개) - ADR 014, 015 반영
 - [x] test_jitter.py 업데이트 (14개)
+- [x] test_reader.py 업데이트 (20개)
 - [x] CLAUDE.md 업데이트
+- [x] **PyInstaller 하이브리드 지원** - `is_pyinstaller()` 유틸리티 (2024-12-24)
 - [ ] test_service.py 업데이트 (~27개, Linux 환경 필요)
 - [ ] 통합 테스트 간소화 (PyInstaller 빌드 제거)
+- [ ] **verify/issue 통합/E2E 테스트 오류 수정** (향후 작업)
 - [ ] 수동 E2E 검증 (Ubuntu 22.04)
 - [ ] 성능 최적화 (병렬 처리, 선택사항)
 

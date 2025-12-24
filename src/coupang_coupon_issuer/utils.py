@@ -1,4 +1,17 @@
+import sys
 import unicodedata
+
+
+def is_pyinstaller() -> bool:
+    """
+    PyInstaller로 빌드된 환경인지 감지
+    
+    Returns:
+        True if running in PyInstaller bundle, False otherwise
+    """
+    # sys.frozen이 있고, PyInstaller가 임시 폴더 경로를 지정하는 _MEIPASS가 있는지 확인
+    return getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')
+
 
 def get_visual_width(text):
     """문자열의 실제 출력 너비를 계산합니다."""

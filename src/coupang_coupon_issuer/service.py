@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 from .config import SERVICE_NAME, ConfigManager, get_log_file
+from .utils import is_pyinstaller
 
 
 class CrontabService:
@@ -270,16 +271,25 @@ class CrontabService:
         # 3. Cron job 추가 (Python 스크립트 경로 + UUID 주석)
         print("\nCron job 추가 중...", flush=True)
 
-        # main.py 스크립트 경로
-        main_script = Path(__file__).parent.parent.parent / "main.py"
-        if not main_script.exists():
-            raise FileNotFoundError(f"main.py not found: {main_script}")
+        # PyInstaller 번들 감지
+        if is_pyinstaller():
+            # PyInstaller로 빌드된 실행 파일
+            executable_path = Path(sys.executable).resolve()
+            cron_cmd = f"{executable_path} issue {base_dir.resolve()}"
+            print(f"PyInstaller 실행 파일 감지: {executable_path}", flush=True)
+        else:
+            # 일반 Python 스크립트
+            main_script = Path(__file__).parent.parent.parent / "main.py"
+            if not main_script.exists():
+                raise FileNotFoundError(f"main.py not found: {main_script}")
+            
+            python_exe = sys.executable or "python3"
+            cron_cmd = f"{python_exe} {main_script.resolve()} issue {base_dir.resolve()}"
+            print(f"Python 스크립트 모드: {main_script}", flush=True)
 
-        python_exe = sys.executable or "python3"
         log_path = get_log_file(base_dir)
 
-        # Cron 명령어 구성
-        cron_cmd = f"{python_exe} {main_script.resolve()} issue {base_dir.resolve()}"
+        # Cron 명령어 구성 (Jitter 옵션 추가는 아래에서)
 
         # Jitter 옵션 포함
         if jitter_max is not None and jitter_max > 0:
@@ -293,11 +303,15 @@ class CrontabService:
         CrontabService._add_cron_job(cron_job)
 
         print("\n설치 완료!")
-        print(f"Python 실행: {python_exe}")
-        print(f"스크립트: {main_script}")
+        if is_pyinstaller():
+            print(f"실행 파일: {Path(sys.executable).resolve()}")
+        else:
+            print(f"Python 실행: {python_exe}")
+            print(f"스크립트: {main_script}")
         print(f"작업 디렉토리: {base_dir}")
         print(f"설정 파일: {base_dir / 'config.json'}")
         print(f"Cron 스케줄: 매일 00:00{' (Jitter 활성화)' if jitter_max else ''}")
+
         if jitter_max:
             print(f"  → 실제 실행: 00:00 ~ {jitter_max//60:02d}:{jitter_max%60:02d} 사이")
         print(f"로그 확인: tail -f {log_path}")

@@ -1,8 +1,9 @@
 """
 Unit tests for utils.py - Korean text alignment utilities
 """
+import sys
 import pytest
-from coupang_coupon_issuer.utils import get_visual_width, kor_align
+from coupang_coupon_issuer.utils import get_visual_width, kor_align, is_pyinstaller
 
 
 @pytest.mark.unit
@@ -116,3 +117,36 @@ class TestKorAlign:
         result = kor_align(123, 10, '>')
         assert result == "       123"
         assert len(result) == 10
+
+
+@pytest.mark.unit
+class TestIsPyinstaller:
+    """Test is_pyinstaller() function"""
+
+    def test_normal_execution(self):
+        """Normal Python execution should return False"""
+        # In normal execution, sys.frozen should not exist or be False
+        assert is_pyinstaller() == False
+
+    def test_pyinstaller_frozen_only(self, monkeypatch):
+        """sys.frozen=True but no _MEIPASS should return False"""
+        monkeypatch.setattr(sys, 'frozen', True, raising=False)
+        # Remove _MEIPASS if it exists
+        if hasattr(sys, '_MEIPASS'):
+            monkeypatch.delattr(sys, '_MEIPASS')
+        
+        assert is_pyinstaller() == False
+
+    def test_pyinstaller_full_bundle(self, monkeypatch):
+        """Both sys.frozen=True and _MEIPASS should return True"""
+        monkeypatch.setattr(sys, 'frozen', True, raising=False)
+        monkeypatch.setattr(sys, '_MEIPASS', '/tmp/_MEI123456', raising=False)
+        
+        assert is_pyinstaller() == True
+
+    def test_meipass_only(self, monkeypatch):
+        """_MEIPASS without frozen should return False"""
+        monkeypatch.setattr(sys, 'frozen', False, raising=False)
+        monkeypatch.setattr(sys, '_MEIPASS', '/tmp/_MEI123456', raising=False)
+        
+        assert is_pyinstaller() == False
