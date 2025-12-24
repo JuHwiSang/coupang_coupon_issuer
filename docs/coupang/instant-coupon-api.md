@@ -57,14 +57,14 @@ https://api-gateway.coupang.com/v2/providers/fms/apis/api/v2/vendors/A00012345/c
 
 ```json
 {
-  "contractId": "10",
+  "contractId": 10,
   "name": "newCoupon 20180328",
-  "maxDiscountPrice": "1000",
-  "discount": "10",
+  "maxDiscountPrice": 1000,
+  "discount": 10,
   "startAt": "2017-12-08 00:00:00",
   "endAt": "2017-12-09 00:00:00",
   "type": "PRICE",
-  "wowExclusive": "false"
+  "wowExclusive": false
 }
 ```
 

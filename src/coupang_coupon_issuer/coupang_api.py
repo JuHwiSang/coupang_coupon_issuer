@@ -184,10 +184,10 @@ class CoupangAPIClient:
         path = f"/v2/providers/fms/apis/api/v2/vendors/{vendor_id}/coupon"
 
         payload = {
-            "contractId": str(contract_id),
+            "contractId": contract_id,
             "name": name,
-            "maxDiscountPrice": str(max_discount_price),
-            "discount": str(discount),
+            "maxDiscountPrice": max_discount_price,
+            "discount": discount,
             "startAt": start_at,
             "endAt": end_at,
             "type": coupon_type
@@ -324,7 +324,7 @@ class CoupangAPIClient:
         payload = {
             "couponItems": [
                 {
-                    "couponId": str(coupon_id),
+                    "couponId": coupon_id,
                     "userId": user_id,
                     "vendorItemIds": vendor_items
                 }

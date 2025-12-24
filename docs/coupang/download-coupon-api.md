@@ -66,7 +66,7 @@ https://api-gateway.coupang.com/v2/providers/marketplace_openapi/apis/api/v1/cou
 ```json
 {
   "title": "쿠폰 명칭",
-  "contractId": "15",
+  "contractId": 15,
   "couponType": "DOWNLOAD",
   "startDate": "2019-05-22 19:55:00",
   "endDate": "2019-06-08 11:00:00",

@@ -42,7 +42,7 @@ https://api-gateway.coupang.com/v2/providers/marketplace_openapi/apis/api/v1/cou
 {
   "couponItems": [
     {
-      "couponId": "15350660",
+      "couponId": 15350660,
       "userId": "testaccount1",
       "vendorItemIds": [
         2306264997,
