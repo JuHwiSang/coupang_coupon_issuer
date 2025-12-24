@@ -348,6 +348,34 @@ class TestIssueCommand:
 
 
 @pytest.mark.unit
+class TestSetupCommand:
+    """Test 'setup' command"""
+
+    def test_setup_calls_crontab_service(self, mocker):
+        """Setup should call CrontabService.setup"""
+        mock_setup = mocker.patch('main.CrontabService.setup')
+
+        args = MagicMock()
+
+        main.cmd_setup(args)
+
+        # Verify setup was called
+        mock_setup.assert_called_once()
+
+    def test_setup_handles_error(self, mocker, capsys):
+        """Setup should exit if CrontabService.setup fails"""
+        mocker.patch('main.CrontabService.setup', side_effect=RuntimeError("Setup failed"))
+
+        args = MagicMock()
+
+        with pytest.raises(SystemExit):
+            main.cmd_setup(args)
+
+        captured = capsys.readouterr()
+        assert "ERROR" in captured.out
+
+
+@pytest.mark.unit
 class TestInstallCommand:
     """Test 'install' command"""
 

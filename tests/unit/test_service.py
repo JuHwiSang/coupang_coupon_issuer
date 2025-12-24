@@ -264,6 +264,55 @@ class TestCrontabOperations:
 
 
 @pytest.mark.unit
+class TestSetup:
+    """Test setup() method - system preparation"""
+
+    def test_setup_installs_cron_when_not_detected(self, mocker):
+        """Setup should install cron if not detected"""
+        # Mock cron not detected
+        mocker.patch.object(CrontabService, '_detect_cron_system', return_value=None)
+        mock_install_cron = mocker.patch.object(CrontabService, '_install_cron')
+        mock_enable = mocker.patch.object(CrontabService, '_enable_cron_service')
+
+        # Run setup
+        CrontabService.setup()
+
+        # Verify cron was installed and enabled
+        mock_install_cron.assert_called_once()
+        mock_enable.assert_called_once()
+
+    def test_setup_skips_install_when_cron_exists(self, mocker, capsys):
+        """Setup should skip installation if cron already exists"""
+        # Mock cron already installed
+        mocker.patch.object(CrontabService, '_detect_cron_system', return_value="cron")
+        mock_install_cron = mocker.patch.object(CrontabService, '_install_cron')
+        mock_enable = mocker.patch.object(CrontabService, '_enable_cron_service')
+
+        # Run setup
+        CrontabService.setup()
+
+        # Should not install, but should enable
+        mock_install_cron.assert_not_called()
+        mock_enable.assert_called_once()
+
+        # Should print message
+        captured = capsys.readouterr()
+        assert "이미 설치되어 있습니다" in captured.out
+
+    def test_setup_always_enables_service(self, mocker):
+        """Setup should always enable cron service"""
+        # Mock cron detected
+        mocker.patch.object(CrontabService, '_detect_cron_system', return_value="cron")
+        mock_enable = mocker.patch.object(CrontabService, '_enable_cron_service')
+
+        # Run setup
+        CrontabService.setup()
+
+        # Should enable service
+        mock_enable.assert_called_once()
+
+
+@pytest.mark.unit
 class TestInstall:
     """Test install() method with UUID-based cron management"""
 
@@ -359,6 +408,19 @@ class TestInstall:
 
         # Verify cron was installed
         mock_install_cron.assert_called_once()
+
+    def test_install_fails_when_cron_not_installed_new(self, tmp_path, mocker):
+        \"\"\"Install should fail with error message if cron not installed\"\"\"
+        # Mock cron not detected
+        mocker.patch.object(CrontabService, '_detect_cron_system', return_value=None)
+
+        # Run install - should raise RuntimeError
+        with pytest.raises(RuntimeError) as exc_info:
+            CrontabService.install(tmp_path, \"access-key\", \"secret-key\", \"user-id\", \"vendor-id\")
+
+        # Verify error message mentions setup
+        assert \"Cron이 설치되어 있지 않습니다\" in str(exc_info.value)
+        assert \"sudo python3 main.py setup\" in str(exc_info.value)
 
 
 @pytest.mark.unit

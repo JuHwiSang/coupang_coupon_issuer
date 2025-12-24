@@ -161,6 +161,16 @@ def cmd_issue(args) -> None:
         sys.exit(1)
 
 
+
+def cmd_setup(args) -> None:
+    """시스템 준비: Cron 설치 및 활성화 (sudo 필요)"""
+    try:
+        CrontabService.setup()
+    except Exception as e:
+        print(f"ERROR: {e}", flush=True)
+        sys.exit(1)
+
+
 def cmd_install(args) -> None:
     """Cron 기반 서비스 설치"""
     base_dir = Path(args.directory).resolve()
@@ -216,13 +226,16 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 사용 예시:
+  # 0. 시스템 준비 (최초 1회, sudo 필요)
+  sudo ./coupang_coupon_issuer setup
+
   # 1. 엑셀 파일 검증 (coupons.xlsx 고정)
   ./coupang_coupon_issuer verify [디렉토리]
 
   # 2. 단발성 쿠폰 발급 (테스트용)
   ./coupang_coupon_issuer issue [디렉토리] [--jitter-max 60]
 
-  # 3. 서비스 설치 (4개 파라미터 필수)
+  # 3. 서비스 설치 (4개 파라미터 필수, sudo 불필요)
   ./coupang_coupon_issuer install [디렉토리] \\
     --access-key YOUR_KEY \\
     --secret-key YOUR_SECRET \\
@@ -240,6 +253,9 @@ def main() -> None:
     )
 
     subparsers = parser.add_subparsers(dest="command", help="명령어")
+
+    # setup 서브파서
+    setup_parser = subparsers.add_parser("setup", help="시스템 준비 (Cron 설치, sudo 필요)")
 
     # verify 서브파서 (apply 대체)
     verify_parser = subparsers.add_parser("verify", help="엑셀 파일 검증 및 미리보기 (coupons.xlsx)")
@@ -306,7 +322,9 @@ def main() -> None:
         sys.exit(1)
 
     # 명령어 실행
-    if args.command == "verify":
+    if args.command == "setup":
+        cmd_setup(args)
+    elif args.command == "verify":
         cmd_verify(args)
     elif args.command == "issue":
         cmd_issue(args)

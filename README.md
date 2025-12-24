@@ -113,7 +113,22 @@ python3 main.py verify --file ./test.xlsx
 검증 완료. 문제없이 발급 가능합니다.
 ```
 
-### 5. 서비스 설치 (Cron 등록)
+### 5. 시스템 준비 (최초 1회, sudo 필요)
+
+Cron 데몬을 설치하고 활성화합니다. 시스템 전체에 한 번만 실행하면 됩니다.
+
+```bash
+sudo python3 main.py setup
+```
+
+**수행 작업**:
+- Cron 데몬 감지
+- 미설치 시 자동 설치 (Ubuntu/Debian/RHEL 지원)
+- Cron 서비스 활성화 및 시작
+
+**참고**: 이미 Cron이 설치되어 있다면 이 단계를 건너뛸 수 있습니다.
+
+### 6. 서비스 설치 (Cron 등록, sudo 불필요)
 
 ```bash
 # 기본 설치 (대화형 입력)
@@ -135,10 +150,13 @@ python3 main.py install ~/my-coupons \
   --jitter-max 60
 ```
 
-**설치 과정** (3단계):
+**설치 과정** (2단계):
 1. config.json 저장 (API 키 + UUID)
-2. Cron 감지/설치/활성화
-3. Crontab에 스케줄 추가 (절대경로 + UUID 주석)
+2. Crontab에 스케줄 추가 (절대경로 + UUID 주석)
+
+**중요**: 
+- `setup` 명령어를 먼저 실행하지 않으면 에러가 발생합니다
+- 일반 사용자 권한으로 실행하므로 파일이 올바른 권한으로 생성됩니다
 
 ### 5. 서비스 관리
 
@@ -285,6 +303,7 @@ uv run pytest tests/unit/test_issuer.py -v
   - [ADR 015: 옵션ID 컬럼 추가](docs/adr/015-option-id-column.md) - 엑셀 7컬럼 구조
   - [ADR 017: 쿠폰 타입별 할인 검증 규칙 분리](docs/adr/017-coupon-type-specific-validation.md) - 쿠폰타입별 검증
   - [ADR 018: 할인방식 한글 입력 지원](docs/adr/018-korean-discount-type-names.md) - 한글 할인방식 입력
+  - [ADR 019: setup/install 명령어 분리](docs/adr/019-setup-install-separation.md) - **현재 구조**, 시스템/사용자 레벨 작업 분리
 
 ## 주요 변경사항 (v3.0)
 

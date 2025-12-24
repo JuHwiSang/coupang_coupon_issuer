@@ -219,6 +219,34 @@ class CrontabService:
         print(f"Cron job이 성공적으로 제거되었습니다 (UUID: {uuid_str})", flush=True)
 
     @staticmethod
+    def setup() -> None:
+        """
+        시스템 준비: Cron 설치 및 활성화 (sudo 필요)
+
+        절차:
+        1. Cron 감지
+        2. 미설치 시 자동 설치
+        3. Cron 서비스 활성화
+        """
+        print(f"\n시스템 준비 중: {SERVICE_NAME}")
+
+        # Cron 감지
+        cron_system = CrontabService._detect_cron_system()
+
+        if cron_system is None:
+            # 미설치 시 자동 설치
+            CrontabService._install_cron()
+        else:
+            print(f"\nCron이 이미 설치되어 있습니다: {cron_system}", flush=True)
+
+        # 서비스 활성화
+        CrontabService._enable_cron_service()
+
+        print("\n시스템 준비 완료!")
+        print("이제 'install' 명령어로 서비스를 설치하세요.")
+        print("예시: python3 main.py install ~/my-coupons")
+
+    @staticmethod
     def install(
         base_dir: Path,
         access_key: str,
@@ -228,11 +256,11 @@ class CrontabService:
         jitter_max: Optional[int] = None
     ) -> None:
         """
-        Cron 기반 서비스 설치
+        서비스 설치: config.json 생성 및 crontab 등록 (sudo 불필요)
 
         절차:
-        1. config.json 로드/생성 (UUID 관리)
-        2. Cron 감지/설치/활성화
+        1. Cron 설치 확인
+        2. config.json 로드/생성 (UUID 관리)
         3. Cron job 추가 (절대경로 + UUID 주석)
 
         Args:
@@ -245,7 +273,18 @@ class CrontabService:
         """
         print(f"\n서비스 설치 중: {SERVICE_NAME}")
 
-        # 1. config.json 로드/생성 (UUID 관리)
+        # 1. Cron 설치 확인
+        cron_system = CrontabService._detect_cron_system()
+        if cron_system is None:
+            raise RuntimeError(
+                "Cron이 설치되어 있지 않습니다.\n"
+                "먼저 다음 명령어를 실행하세요:\n"
+                "  sudo python3 main.py setup"
+            )
+        else:
+            print(f"\nCron이 감지되었습니다: {cron_system}", flush=True)
+
+        # 2. config.json 로드/생성 (UUID 관리)
         existing_uuid = ConfigManager.get_installation_id(base_dir)
         if existing_uuid:
             # 기존 설치 존재 → 먼저 제거
@@ -257,16 +296,6 @@ class CrontabService:
         new_uuid = ConfigManager.save_config(
             base_dir, access_key, secret_key, user_id, vendor_id
         )
-
-        # 2. Cron 감지/설치/활성화
-        cron_system = CrontabService._detect_cron_system()
-
-        if cron_system is None:
-            CrontabService._install_cron()
-        else:
-            print(f"\nCron이 감지되었습니다: {cron_system}", flush=True)
-
-        CrontabService._enable_cron_service()
 
         # 3. Cron job 추가 (Python 스크립트 경로 + UUID 주석)
         print("\nCron job 추가 중...", flush=True)

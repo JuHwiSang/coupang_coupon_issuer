@@ -41,6 +41,7 @@
 - [ADR 016: 테스트 레이어 분리](docs/adr/016-test-layer-separation.md) - unit/integration/e2e 분리 전략
 - [ADR 017: 쿠폰 타입별 할인 검증 규칙 분리](docs/adr/017-coupon-type-specific-validation.md) - 다운로드/즉시할인 쿠폰 검증 분리
 - [ADR 018: 할인방식 한글 입력 지원](docs/adr/018-korean-discount-type-names.md) - 정률할인/수량별 정액할인/정액할인 한글 입력
+- [ADR 019: setup/install 명령어 분리](docs/adr/019-setup-install-separation.md) - **현재 구조**, 시스템/사용자 레벨 작업 분리, 파일 권한 정상화
 
 ### 📝 문서 작성 규칙
 
@@ -207,6 +208,11 @@ tests/
 Python 스크립트 형태로 실행:
 
 ```bash
+# 0. 시스템 준비 (최초 1회, sudo 필요)
+sudo python3 main.py setup
+# → Cron 데몬 설치 및 활성화
+# → 시스템 전체에 한 번만 실행하면 됨
+
 # 1. 엑셀 파일 검증 및 미리보기 (테이블 형식, coupons.xlsx 고정)
 python3 main.py verify [디렉토리]
 # 예시:
@@ -230,7 +236,7 @@ python3 main.py issue ~/my-coupons    # 특정 디렉토리
 # 2-1. Jitter 적용 (Thundering herd 방지)
 python3 main.py issue . --jitter-max 60  # 0-60분 랜덤 지연
 
-# 3. 서비스 설치 (cron 등록)
+# 3. 서비스 설치 (cron 등록, sudo 불필요)
 python3 main.py install [디렉토리]
 # 예시:
 python3 main.py install .               # 현재 디렉토리
@@ -265,7 +271,12 @@ crontab -l                            # 스케줄 확인
 tail -f ~/my-coupons/issuer.log       # 로그 확인
 ```
 
-**주요 변경사항 (ADR 014)**:
+**주요 변경사항 (ADR 019)**:
+- **setup/install 분리**: 시스템 준비(sudo)와 서비스 설치(일반 사용자) 분리
+- **파일 권한 정상화**: config.json, 로그 파일이 일반 사용자 소유로 생성
+- **명확한 책임 분리**: 시스템 레벨 작업(setup)과 사용자 레벨 작업(install) 구분
+
+**이전 변경사항 (ADR 014)**:
 - Python 스크립트 실행: `python3 main.py` (PyInstaller 제거)
 - 디렉토리 인자 추가: 작업 디렉토리를 런타임에 지정
 - 기본값 pwd: 디렉토리 미지정 시 현재 디렉토리 사용 (기본값: `"."`)
