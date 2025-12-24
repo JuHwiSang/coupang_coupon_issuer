@@ -3,6 +3,7 @@
 import os
 import hmac
 import hashlib
+import json
 import time
 from datetime import datetime
 from typing import Optional, Dict, Any, List
@@ -90,7 +91,24 @@ class CoupangAPIClient:
         }
 
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        print(f"[{timestamp}] API 요청: {method} {path}", flush=True)
+        
+        # ===== 요청 로깅 (HTTP RAW 형식) =====
+        print(f"\n{'='*80}", flush=True)
+        print(f"[{timestamp}] HTTP REQUEST", flush=True)
+        print(f"{'='*80}", flush=True)
+        print(f"{method} {path}", flush=True)
+        print(f"Full URL: {url}", flush=True)
+        print(f"\n--- Request Headers ---", flush=True)
+        for header_name, header_value in headers.items():
+            print(f"{header_name}: {header_value}", flush=True)
+        
+        if json_data:
+            print(f"\n--- Request Body (JSON) ---", flush=True)
+            print(json.dumps(json_data, indent=2, ensure_ascii=False), flush=True)
+        else:
+            print(f"\n--- Request Body ---", flush=True)
+            print("(empty)", flush=True)
+        print(f"{'='*80}\n", flush=True)
 
         try:
             response = self.session.request(
@@ -100,6 +118,19 @@ class CoupangAPIClient:
                 headers=headers,
                 timeout=timeout
             )
+
+            # ===== 응답 로깅 (HTTP RAW 형식) =====
+            print(f"\n{'='*80}", flush=True)
+            print(f"[{timestamp}] HTTP RESPONSE", flush=True)
+            print(f"{'='*80}", flush=True)
+            print(f"Status Code: {response.status_code} {response.reason}", flush=True)
+            print(f"\n--- Response Headers ---", flush=True)
+            for header_name, header_value in response.headers.items():
+                print(f"{header_name}: {header_value}", flush=True)
+            
+            print(f"\n--- Response Body (Raw) ---", flush=True)
+            print(response.text, flush=True)
+            print(f"{'='*80}\n", flush=True)
 
             # HTTP 오류 체크
             response.raise_for_status()
