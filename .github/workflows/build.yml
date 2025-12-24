@@ -20,7 +20,7 @@ jobs:
     
     - name: Install dependencies with uv
       run: |
-        uv sync --group dev
+        uv sync --group build
     
     - name: Build executable with PyInstaller
       run: |
