@@ -214,6 +214,33 @@ python3 main.py install ~/new-location \
 }
 ```
 
+## CI/CD
+
+### GitHub Actions 자동 빌드
+
+PyInstaller 기반 단일 실행 파일을 자동으로 빌드합니다.
+
+**트리거**:
+- `main` 브랜치 push 시 자동 실행
+- 수동 실행 가능 (Actions 탭 → Build Executable → Run workflow)
+
+**Artifact 다운로드**:
+1. GitHub 저장소 → Actions 탭
+2. 최근 워크플로우 실행 선택
+3. Artifacts 섹션에서 `coupang_coupon_issuer-linux` 다운로드
+
+**로컬 빌드**:
+```bash
+# 빌드 의존성 설치
+uv sync --group build
+
+# PyInstaller 빌드
+uv run pyinstaller --paths src --name coupang_coupon_issuer --onefile main.py
+
+# 결과물 확인
+./dist/coupang_coupon_issuer --help
+```
+
 ## 개발
 
 ### 개발 환경 설정

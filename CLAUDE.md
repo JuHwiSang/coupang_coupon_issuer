@@ -68,6 +68,12 @@
 - **Python**: 3.10+ 필수
 - **의존성**: requests, openpyxl 필요
 
+### CI/CD 환경
+- **GitHub Actions**: 자동 빌드 워크플로우
+- **빌드 도구**: uv + PyInstaller
+- **타겟 플랫폼**: Linux (ubuntu-latest)
+- **Artifact**: `coupang_coupon_issuer` 바이너리 (30일 보관)
+
 ### 지원 배포판
 
 Python 3.10+ 요구사항으로 인해 다음 버전 이상에서만 동작합니다:
@@ -565,6 +571,51 @@ def test_container(test_image):
    - ~~**PyInstaller 빌드 자동화**~~ → Python 스크립트 직접 실행
    - **Cron 서비스 자동 시작**: 각 컨테이너마다 cron 서비스 실행
    - **UUID 기반 테스트**: installation_id 검증, 재설치 시나리오
+
+## CI/CD (GitHub Actions)
+
+### 자동 빌드 워크플로우
+
+GitHub Actions를 통해 PyInstaller 기반 단일 실행 파일을 자동으로 빌드합니다.
+
+**워크플로우 파일**: `.github/workflows/build.yml`
+
+**트리거**:
+- `main` 브랜치에 push 시
+- 수동 실행 (workflow_dispatch)
+
+**빌드 과정**:
+```yaml
+1. Checkout code
+2. Install uv (latest)
+3. Install dependencies (uv sync --group build)
+4. Build executable (uv run pyinstaller --paths src --name coupang_coupon_issuer --onefile main.py)
+5. Upload artifact (dist/coupang_coupon_issuer)
+```
+
+**Artifact 다운로드**:
+- GitHub Actions 페이지 → 워크플로우 실행 → Artifacts
+- 파일명: `coupang_coupon_issuer-linux`
+- 보관 기간: 30일
+
+**의존성 그룹** (`pyproject.toml`):
+```toml
+[dependency-groups]
+build = ["pyinstaller"]
+dev = ["pytest", "pytest-cov", ...]
+```
+
+**빌드 명령어** (로컬):
+```bash
+# 의존성 설치
+uv sync --group build
+
+# 빌드 실행
+uv run pyinstaller --paths src --name coupang_coupon_issuer --onefile main.py
+
+# 결과물 확인
+ls -lh dist/coupang_coupon_issuer
+```
 
 ## 배포 가이드 (스크립트 기반)
 
