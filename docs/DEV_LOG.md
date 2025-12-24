@@ -874,3 +874,32 @@ uv run python main.py verify examples/
 - [src/coupang_coupon_issuer/utils.py](../src/coupang_coupon_issuer/utils.py) - 정렬 유틸리티
 - [tests/unit/test_reader.py](../tests/unit/test_reader.py) - 엑셀 로직 테스트
 - [tests/unit/test_utils.py](../tests/unit/test_utils.py) - 정렬 유틸리티 테스트
+
+### Coupang API 타입 오류 수정 (2024-12-25)
+
+**문제**: Coupang API 문서의 예제가 명세와 불일치 (예제는 문자열, 명세는 숫자)
+
+**원인**: Coupang 측 문서 작성 오류 - 명세는 올바르나 예제가 잘못됨
+
+**수정 항목**:
+
+1. **API 문서 예제 수정**:
+   - `instant-coupon-api.md`: `contractId`, `maxDiscountPrice`, `discount`, `wowExclusive` → 숫자/불린 타입
+   - `download-coupon-api.md`: `contractId` → 숫자 타입
+   - `download-coupon-item-api.md`: `couponId` → 숫자 타입
+
+2. **코드 수정** (`coupang_api.py`):
+   - `create_instant_coupon()`: `str(contract_id)` → `contract_id` (숫자 전송)
+   - `create_instant_coupon()`: `str(max_discount_price)` → `max_discount_price` (숫자 전송)
+   - `create_instant_coupon()`: `str(discount)` → `discount` (숫자 전송)
+   - `apply_download_coupon()`: `str(coupon_id)` → `coupon_id` (숫자 전송)
+
+**영향**: 문자열로 전송 시 `Bad Request` 오류 발생 → 숫자 타입으로 수정하여 해결
+
+**참조**:
+- [docs/coupang/instant-coupon-api.md](../docs/coupang/instant-coupon-api.md)
+- [docs/coupang/download-coupon-api.md](../docs/coupang/download-coupon-api.md)
+- [docs/coupang/download-coupon-item-api.md](../docs/coupang/download-coupon-item-api.md)
+- [src/coupang_coupon_issuer/coupang_api.py](../src/coupang_coupon_issuer/coupang_api.py)
+
+---
