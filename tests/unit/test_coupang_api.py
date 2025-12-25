@@ -169,10 +169,10 @@ class TestInstantCoupon:
 
         # Verify request payload
         request_body = requests_mock.last_request.json()
-        assert request_body["contractId"] == "-1"  # String conversion
+        assert request_body["contractId"] == -1  # Numeric value
         assert request_body["name"] == "Test Coupon"
-        assert request_body["maxDiscountPrice"] == "100000"
-        assert request_body["discount"] == "1000"
+        assert request_body["maxDiscountPrice"] == 100000  # Numeric value
+        assert request_body["discount"] == 1000  # Numeric value
         assert request_body["type"] == "PRICE"
 
     def test_create_instant_coupon_rate_discount(self, requests_mock):
@@ -202,7 +202,7 @@ class TestInstantCoupon:
         # Verify RATE type
         request_body = requests_mock.last_request.json()
         assert request_body["type"] == "RATE"
-        assert request_body["discount"] == "50"
+        assert request_body["discount"] == 50  # Numeric value
 
 
 @pytest.mark.unit
@@ -336,7 +336,7 @@ class TestParameterHandling:
 
         # Verify contractId in request
         request_body = requests_mock.last_request.json()
-        assert request_body["contractId"] == "-1"
+        assert request_body["contractId"] == -1  # Numeric value
 
     def test_string_conversion_of_numbers(self, requests_mock):
         """Verify numeric values are converted to strings"""
@@ -361,10 +361,10 @@ class TestParameterHandling:
 
         request_body = requests_mock.last_request.json()
 
-        # All numeric fields should be strings
-        assert isinstance(request_body["contractId"], str)
-        assert isinstance(request_body["maxDiscountPrice"], str)
-        assert isinstance(request_body["discount"], str)
+        # All numeric fields should be integers
+        assert isinstance(request_body["contractId"], int)
+        assert isinstance(request_body["maxDiscountPrice"], int)
+        assert isinstance(request_body["discount"], int)
 
     def test_content_type_header(self, requests_mock):
         """Verify Content-Type header is set correctly"""
@@ -383,3 +383,114 @@ class TestParameterHandling:
         assert headers["Content-Type"] == "application/json;charset=UTF-8"
         assert "Authorization" in headers
         assert headers["Authorization"].startswith("CEA algorithm=HmacSHA256")
+
+
+@pytest.mark.unit
+class TestContractList:
+    """Test get_contract_list()"""
+
+    def test_get_contract_list_success(self, requests_mock):
+        """Mock successful contract list retrieval"""
+        client = CoupangAPIClient("test-access", "test-secret")
+
+        vendor_id = "A00012345"
+        requests_mock.get(
+            f"https://api-gateway.coupang.com/v2/providers/fms/apis/api/v2/vendors/{vendor_id}/contract/list",
+            status_code=200,
+            json={
+                "code": 200,
+                "message": "OK",
+                "data": {
+                    "success": True,
+                    "content": [
+                        {
+                            "contractId": 1,
+                            "vendorContractId": 2,
+                            "sellerId": "A00012345",
+                            "type": "CONTRACT_BASED",
+                            "start": "2017-03-01 00:00:00",
+                            "end": "2017-12-31 23:59:59"
+                        },
+                        {
+                            "contractId": 15,
+                            "vendorContractId": -1,
+                            "sellerId": "A00012345",
+                            "type": "NON_CONTRACT_BASED",
+                            "start": "2017-09-25 11:40:01",
+                            "end": "2999-12-31 23:59:59"
+                        }
+                    ]
+                }
+            }
+        )
+
+        result = client.get_contract_list(vendor_id)
+
+        assert result["code"] == 200
+        assert result["data"]["success"] is True
+        assert len(result["data"]["content"]) == 2
+
+        # Verify NON_CONTRACT_BASED contract exists
+        contracts = result["data"]["content"]
+        non_contract = [c for c in contracts if c["type"] == "NON_CONTRACT_BASED"]
+        assert len(non_contract) == 1
+        assert non_contract[0]["contractId"] == 15
+        assert non_contract[0]["vendorContractId"] == -1
+
+    def test_get_contract_list_empty(self, requests_mock):
+        """Mock empty contract list"""
+        client = CoupangAPIClient("test-access", "test-secret")
+
+        vendor_id = "A00012345"
+        requests_mock.get(
+            f"https://api-gateway.coupang.com/v2/providers/fms/apis/api/v2/vendors/{vendor_id}/contract/list",
+            status_code=200,
+            json={
+                "code": 200,
+                "message": "OK",
+                "data": {
+                    "success": True,
+                    "content": []
+                }
+            }
+        )
+
+        result = client.get_contract_list(vendor_id)
+
+        assert result["code"] == 200
+        assert result["data"]["content"] == []
+
+    def test_get_contract_list_unauthorized(self, requests_mock):
+        """Mock 401 unauthorized error"""
+        client = CoupangAPIClient("test-access", "test-secret")
+
+        vendor_id = "A00012345"
+        requests_mock.get(
+            f"https://api-gateway.coupang.com/v2/providers/fms/apis/api/v2/vendors/{vendor_id}/contract/list",
+            status_code=401,
+            json={"error": "Unauthorized"}
+        )
+
+        with pytest.raises(requests.HTTPError):
+            client.get_contract_list(vendor_id)
+
+    def test_get_contract_list_api_error(self, requests_mock):
+        """Mock API-level error (HTTP 200 but code != 200)"""
+        client = CoupangAPIClient("test-access", "test-secret")
+
+        vendor_id = "A00012345"
+        requests_mock.get(
+            f"https://api-gateway.coupang.com/v2/providers/fms/apis/api/v2/vendors/{vendor_id}/contract/list",
+            status_code=200,
+            json={
+                "code": 401,
+                "message": "업체정보의 권한을 확인하세요.",
+                "errorMessage": "업체정보의 권한을 확인하세요."
+            }
+        )
+
+        with pytest.raises(ValueError) as exc_info:
+            client.get_contract_list(vendor_id)
+
+        assert "API Error (code 401)" in str(exc_info.value)
+        assert "업체정보의 권한을 확인하세요" in str(exc_info.value)

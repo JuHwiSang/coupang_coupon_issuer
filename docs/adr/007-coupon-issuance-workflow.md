@@ -32,9 +32,11 @@ Coupang API를 통한 쿠폰 발급은 단순한 단일 API 호출이 아닌, **
 
 ### 워크플로우 구조
 
-각 쿠폰 발급은 다음 **4단계 프로세스**로 구현:
+쿠폰 발급은 다음 **5단계 프로세스**로 구현:
 
 ```
+0. 계약 ID 조회 (초기화 시 1회)
+   ↓
 1. 쿠폰 생성 API 호출
    ↓
 2. 쿠폰 생성 상태 확인 (즉시할인만, 폴링)
@@ -46,12 +48,40 @@ Coupang API를 통한 쿠폰 발급은 단순한 단일 API 호출이 아닌, **
 완료
 ```
 
-**실패 시**: 어느 단계에서든 실패하면 **1단계부터 전체 재시도**
+**0단계 (계약 ID 조회)**:
+- `CouponIssuer` 초기화 시 1회만 실행
+- 자유계약기반(NON_CONTRACT_BASED) 계약 자동 검색
+- 실패 시 초기화 단계에서 즉시 중단 (쿠폰 발급 불가)
+
+**1~4단계 (쿠폰 발급)**:
+- 각 쿠폰마다 반복 실행
+- 실패 시 **1단계부터 전체 재시도**
+
+### 계약 ID 조회 플로우 (초기화 시)
+
+```python
+# 0. 계약 ID 조회 (CouponIssuer.__init__에서 실행)
+response = api.get_contract_list(vendor_id)
+contracts = response['data']['content']
+
+# 자유계약기반 필터링
+non_contract_based = [
+    c for c in contracts 
+    if c['type'] == 'NON_CONTRACT_BASED' and c['vendorContractId'] == -1
+]
+
+if not non_contract_based:
+    raise ValueError("자유계약기반 계약을 찾을 수 없습니다")
+
+# 첫 번째 자유계약 사용
+contract_id = non_contract_based[0]['contractId']
+print(f"계약 발견: contractId={contract_id}")
+```
 
 ### 즉시할인쿠폰 상세 플로우
 
 ```python
-# 1. 쿠폰 생성
+# 1. 쿠폰 생성 (contract_id는 0단계에서 획득한 값 사용)
 response = api.create_instant_coupon(...)
 requested_id_1 = response['data']['content']['requestedId']
 
@@ -212,6 +242,14 @@ POLL_MAX_ATTEMPTS = POLL_TIMEOUT // POLL_INTERVAL  # 30회
 ### coupang_api.py에 추가 필요
 
 ```python
+def get_contract_list(
+    self,
+    vendor_id: str
+) -> Dict[str, Any]:
+    """계약 목록 조회"""
+    path = f"/v2/providers/fms/apis/api/v2/vendors/{vendor_id}/contract/list"
+    return self._request("GET", path)
+
 def check_instant_coupon_status(
     self,
     vendor_id: str,
@@ -225,6 +263,28 @@ def check_instant_coupon_status(
 ### issuer.py에 구현 필요
 
 ```python
+def __init__(self, ...):
+    """초기화 시 계약 ID 조회"""
+    self.api_client = CoupangAPIClient(access_key, secret_key)
+    
+    # 0. 계약 ID 조회 (1회)
+    self.contract_id = self._fetch_contract_id()
+
+def _fetch_contract_id(self) -> int:
+    """자유계약기반 계약 ID 조회"""
+    response = self.api_client.get_contract_list(self.vendor_id)
+    contracts = response['data']['content']
+    
+    non_contract_based = [
+        c for c in contracts 
+        if c['type'] == 'NON_CONTRACT_BASED' and c['vendorContractId'] == -1
+    ]
+    
+    if not non_contract_based:
+        raise ValueError("자유계약기반 계약을 찾을 수 없습니다")
+    
+    return non_contract_based[0]['contractId']
+
 def _issue_instant_coupon_with_retry(
     self,
     coupon_data: Dict[str, Any],
@@ -234,7 +294,7 @@ def _issue_instant_coupon_with_retry(
 
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            # 1. 쿠폰 생성
+            # 1. 쿠폰 생성 (self.contract_id 사용)
             # 2. 생성 상태 확인 (폴링)
             # 3. 아이템 적용
             # 4. 적용 상태 확인 (폴링)
@@ -246,9 +306,15 @@ def _issue_instant_coupon_with_retry(
                 return {'status': '실패', 'message': str(e)}
 ```
 
+## 변경 이력
+
+- **2024-12-16**: 초기 작성 (4단계 워크플로우)
+- **2025-12-25**: 계약 ID 조회 단계 추가 (0단계), 하드코딩된 -1 대신 API에서 동적 조회
+
 ## 참고 문서
 
 - [Coupang 쿠폰 발급 워크플로우](../coupang/workflow.md)
+- [계약 목록 조회 API](../coupang/contract-list-api.md)
 - [즉시할인쿠폰 생성 API](../coupang/instant-coupon-api.md)
 - [즉시할인쿠폰 아이템 생성 API](../coupang/instant-coupon-item-api.md)
 - [즉시할인쿠폰 상태 확인 API](../coupang/instant-coupon-status-api.md)

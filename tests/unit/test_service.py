@@ -410,17 +410,17 @@ class TestInstall:
         mock_install_cron.assert_called_once()
 
     def test_install_fails_when_cron_not_installed_new(self, tmp_path, mocker):
-        \"\"\"Install should fail with error message if cron not installed\"\"\"
+        """Install should fail with error message if cron not installed"""
         # Mock cron not detected
         mocker.patch.object(CrontabService, '_detect_cron_system', return_value=None)
 
         # Run install - should raise RuntimeError
         with pytest.raises(RuntimeError) as exc_info:
-            CrontabService.install(tmp_path, \"access-key\", \"secret-key\", \"user-id\", \"vendor-id\")
+            CrontabService.install(tmp_path, "access-key", "secret-key", "user-id", "vendor-id")
 
         # Verify error message mentions setup
-        assert \"Cron이 설치되어 있지 않습니다\" in str(exc_info.value)
-        assert \"sudo python3 main.py setup\" in str(exc_info.value)
+        assert "Cron이 설치되어 있지 않습니다" in str(exc_info.value)
+        assert "sudo python3 main.py setup" in str(exc_info.value)
 
 
 @pytest.mark.unit

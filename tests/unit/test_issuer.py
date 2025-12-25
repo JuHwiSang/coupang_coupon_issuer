@@ -16,6 +16,21 @@ from coupang_coupon_issuer.config import (
 )
 
 
+@pytest.fixture(autouse=True)
+def mock_contract_id(monkeypatch):
+    """
+    Auto-mock _fetch_contract_id() for all tests.
+    This prevents actual API calls during CouponIssuer initialization.
+    """
+    def mock_fetch(self):
+        return 12345  # Mock contract ID
+    
+    monkeypatch.setattr(
+        "coupang_coupon_issuer.issuer.CouponIssuer._fetch_contract_id",
+        mock_fetch
+    )
+
+
 @pytest.mark.unit
 class TestCouponIssuerInit:
     """Test CouponIssuer initialization"""
@@ -481,9 +496,9 @@ class TestIssuanceWorkflow:
         # Verify request payload
         request_body = requests_mock.last_request.json()
         assert request_body["name"] == "즉시할인쿠폰"
-        assert request_body["contractId"] == "-1"
-        assert request_body["maxDiscountPrice"] == str(COUPON_MAX_DISCOUNT)
-        assert request_body["discount"] == "1000"
+        assert request_body["contractId"] == 12345  # Mocked contract ID (numeric)
+        assert request_body["maxDiscountPrice"] == COUPON_MAX_DISCOUNT  # Numeric
+        assert request_body["discount"] == 1000  # Numeric
         assert request_body["type"] == "PRICE"
 
     def test_issue_single_coupon_download_coupon(self, tmp_path, requests_mock):
@@ -513,7 +528,7 @@ class TestIssuanceWorkflow:
         # Verify request payload
         request_body = requests_mock.last_request.json()
         assert request_body["title"] == "다운로드쿠폰"
-        assert request_body["contractId"] == COUPON_CONTRACT_ID
+        assert request_body["contractId"] == 12345  # Mocked contract ID (numeric)
         assert request_body["couponType"] == "DOWNLOAD"
         assert request_body["userId"] == "test-user"
         assert len(request_body["policies"]) == 1

@@ -55,12 +55,59 @@ class CouponIssuer:
         # Coupang API 클라이언트 초기화
         self.api_client = CoupangAPIClient(self.access_key, self.secret_key)
 
-        print(f"[{self._timestamp()}] 설정 로드 완료 (Vendor: {self.vendor_id}, Contract: {COUPON_CONTRACT_ID})", flush=True)
+        # 계약 ID 가져오기 (자유계약기반)
+        self.contract_id = self._fetch_contract_id()
+        print(f"[{self._timestamp()}] 설정 로드 완료 (Vendor: {self.vendor_id}, Contract: {self.contract_id})", flush=True)
 
     @staticmethod
     def _timestamp() -> str:
         """현재 시각 문자열 반환"""
         return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    def _fetch_contract_id(self) -> int:
+        """
+        자유계약기반(NON_CONTRACT_BASED) 계약 ID 조회
+        
+        Returns:
+            contractId: 자유계약기반 계약의 ID
+        
+        Raises:
+            ValueError: 자유계약기반 계약을 찾을 수 없는 경우
+        """
+        timestamp = self._timestamp()
+        print(f"[{timestamp}] 계약 목록 조회 중...", flush=True)
+        
+        try:
+            response = self.api_client.get_contract_list(self.vendor_id)
+            contracts = response.get('data', {}).get('content', [])
+            
+            # NON_CONTRACT_BASED 계약 필터링 (vendorContractId == -1)
+            non_contract_based = [
+                c for c in contracts 
+                if c.get('type') == 'NON_CONTRACT_BASED' and c.get('vendorContractId') == -1
+            ]
+            
+            if not non_contract_based:
+                raise ValueError(
+                    "자유계약기반(NON_CONTRACT_BASED) 계약을 찾을 수 없습니다. "
+                    "쿠팡 판매자 센터에서 계약 설정을 확인하세요."
+                )
+            
+            # 첫 번째 자유계약 사용
+            contract = non_contract_based[0]
+            contract_id = contract.get('contractId')
+            
+            print(
+                f"[{timestamp}] 자유계약기반 계약 발견: contractId={contract_id}, "
+                f"기간={contract.get('start')} ~ {contract.get('end')}",
+                flush=True
+            )
+            
+            return contract_id
+            
+        except Exception as e:
+            print(f"[{timestamp}] ERROR: 계약 조회 실패: {e}", flush=True)
+            raise
 
     def issue(self) -> None:
         """
@@ -225,7 +272,7 @@ class CouponIssuer:
         # 1단계: 쿠폰 생성
         response1 = self.api_client.create_instant_coupon(
             vendor_id=self.vendor_id,
-            contract_id=COUPON_CONTRACT_ID,
+            contract_id=self.contract_id,
             name=coupon_name,
             max_discount_price=COUPON_MAX_DISCOUNT,
             discount=discount,
@@ -314,7 +361,7 @@ class CouponIssuer:
 
         # 1단계: 쿠폰 생성 (동기 API - 바로 couponId 반환)
         response1 = self.api_client.create_download_coupon(
-            contract_id=COUPON_CONTRACT_ID,
+            contract_id=self.contract_id,
             title=coupon_name,
             start_date=start_date,
             end_date=end_date,

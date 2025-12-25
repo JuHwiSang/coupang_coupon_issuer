@@ -332,3 +332,25 @@ class CoupangAPIClient:
         }
 
         return self._request("PUT", path, json_data=payload)
+
+    def get_contract_list(self, vendor_id: str) -> Dict[str, Any]:
+        """
+        계약 목록 조회
+        
+        Args:
+            vendor_id: 판매자 ID (예: A00012345)
+        
+        Returns:
+            API 응답 전체 (dict)
+            - data.success: 성공 여부
+            - data.content: 계약서 목록
+              - contractId: 업체의 계약서 아이디
+              - vendorContractId: 업체의 계약서 코드 (-1은 자유계약기반)
+              - type: CONTRACT_BASED 또는 NON_CONTRACT_BASED
+              - sellerId: 판매자ID
+              - start: 시작일시
+              - end: 종료일시
+        """
+        path = f"/v2/providers/fms/apis/api/v2/vendors/{vendor_id}/contract/list"
+        
+        return self._request("GET", path)

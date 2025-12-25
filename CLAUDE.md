@@ -26,9 +26,9 @@
 - [ADR 001: 엑셀 입력 구조](docs/adr/001-excel-structure.md) - ~~5개 컴럼 구조~~ (대체됨, ADR 009 참조)
 - [ADR 002: 입력 정규화](docs/adr/002-input-normalization.md) - 사용자 입력 오류 용인 로직
 - [ADR 003: API 인증](docs/adr/003-api-authentication.md) - HMAC-SHA256 서명 생성
-- [ADR 004: 고정 설정값](docs/adr/004-fixed-configuration-values.md) - contract_id, 예산 등
+- [ADR 004: 고정 설정값](docs/adr/004-fixed-configuration-values.md) - ~~contract_id~~, 예산 등
 - [ADR 005: systemd 서비스](docs/adr/005-systemd-service.md) - ~~스케줄링 전략, 로깅~~ (대체됨, ADR 010 참조)
-- [ADR 006: contract_id=-1 무료 예산](docs/adr/006-contract-id-negative-one.md) - 무료 예산 사용
+- [ADR 006: contract_id=-1 무료 예산](docs/adr/006-contract-id-negative-one.md) - ~~무료 예산 사용~~ (업데이트됨: 동적 조회 방식으로 변경)
 - [ADR 007: 쿠폰 발급 워크플로우](docs/adr/007-coupon-issuance-workflow.md) - 다단계 비동기 처리
 - [ADR 008: CLI 구조 재설계](docs/adr/008-cli-restructuring.md) - ~~4개 명령어, 전역 명령어~~ (대체됨, ADR 014 참조)
 - [ADR 009: 엑셀 6컴럼 구조](docs/adr/009-excel-6-column-structure.md) - ~~할인금액/비율과 발급개수 분리~~ (대체됨, ADR 015 참조)
@@ -42,6 +42,30 @@
 - [ADR 017: 쿠폰 타입별 할인 검증 규칙 분리](docs/adr/017-coupon-type-specific-validation.md) - 다운로드/즉시할인 쿠폰 검증 분리
 - [ADR 018: 할인방식 한글 입력 지원](docs/adr/018-korean-discount-type-names.md) - 정률할인/수량별 정액할인/정액할인 한글 입력
 - [ADR 019: setup/install 명령어 분리](docs/adr/019-setup-install-separation.md) - **현재 구조**, 시스템/사용자 레벨 작업 분리, 파일 권한 정상화
+
+## 계약 타입 (Contract Types)
+
+본 시스템은 **자유계약기반(NON_CONTRACT_BASED)** 계약만을 사용하여 쿠폰을 발급합니다.
+
+### 자유계약기반 (NON_CONTRACT_BASED)
+- `vendorContractId`가 `-1`인 계약
+- 별도의 계약서 없이 자유롭게 쿠폰을 발급할 수 있는 계약
+- 일반적으로 종료일이 먼 미래(`2999-12-31 23:59:59`)로 설정됨
+- **시스템 시작 시 API를 통해 자동으로 조회하여 사용**
+
+### 계약기반 (CONTRACT_BASED)
+- `vendorContractId`가 양수인 계약
+- 특정 계약서에 기반한 쿠폰 발급
+- 계약 기간이 명확하게 정의됨
+- **본 시스템에서는 사용하지 않음**
+
+### contractId 조회 프로세스
+1. `CouponIssuer` 초기화 시 계약 목록 API 호출 (`GET /v2/providers/fms/apis/api/v2/vendors/{vendorId}/contract/list`)
+2. 응답에서 `type`이 `NON_CONTRACT_BASED`이고 `vendorContractId`가 `-1`인 계약 필터링
+3. 첫 번째 자유계약기반 계약의 `contractId`를 사용
+4. 자유계약기반 계약이 없으면 오류 발생
+
+자세한 API 규격은 [계약 목록 조회 API](docs/coupang/contract-list-api.md)를 참조하세요.
 
 ### 📝 문서 작성 규칙
 
@@ -153,6 +177,7 @@ docs/
 └── coupang/                     # Coupang API 규격 문서
     ├── workflow.md
     ├── parameters-explained.md
+    ├── contract-list-api.md     # 계약 목록 조회 API
     └── (각종 API 문서)
 
 # 예시 파일
