@@ -50,14 +50,14 @@ def cmd_verify(args) -> None:
     # 테이블 형식 출력 (엑셀처럼)
     print(f"\n✓ {len(coupons)}개 쿠폰 로드 완료\n", flush=True)
 
-    # 헤더 (6개 컬럼 + 예산)
+    # 헤더 (9개 컬럼 + 예산)
     headers = [
         "No", "쿠폰이름", "쿠폰타입", "유효기간", "할인방식",
-        "할인금액", "할인비율", "발급개수", "총 예산"
+        "할인금액", "할인비율", "최소구매", "최대할인", "발급개수", "총 예산"
     ]
 
     # 헤더 너비 설정
-    widths = [4, 25, 13, 10, 17, 10, 10, 10, 12]
+    widths = [4, 20, 13, 10, 17, 10, 10, 10, 10, 10, 12]
 
     # 헤더 출력
     header_line = "  ".join(kor_align(h, w, '>') for h, w in zip(headers, widths))
@@ -85,6 +85,17 @@ def cmd_verify(args) -> None:
         # 할인방식 한글 변환
         discount_type_kr = DISCOUNT_TYPE_EN_TO_KR.get(discount_type, discount_type)
 
+        # 최소구매금액 (다운로드쿠폰 전용)
+        min_purchase = coupon.get('min_purchase_price')
+        if min_purchase is not None and min_purchase > 1:
+            min_purchase_str = f"{min_purchase:,}"
+        else:
+            min_purchase_str = ""
+
+        # 최대할인금액
+        max_discount = coupon.get('max_discount_price', 0)
+        max_discount_str = f"{max_discount:,}" if max_discount > 0 else ""
+
         # 발급개수 처리 (즉시할인은 비워둠)
         issue_count_val = coupon['issue_count']
         if issue_count_val is None:
@@ -106,6 +117,8 @@ def cmd_verify(args) -> None:
             discount_type_kr[:10],
             discount_amount_str,
             discount_rate_str,
+            min_purchase_str,
+            max_discount_str,
             issue_count_str,
             f"{budget:,}원"
         ]

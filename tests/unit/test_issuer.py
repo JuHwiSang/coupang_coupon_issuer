@@ -10,7 +10,6 @@ from openpyxl import Workbook
 
 from coupang_coupon_issuer.issuer import CouponIssuer
 from coupang_coupon_issuer.config import (
-    COUPON_MAX_DISCOUNT,
     COUPON_CONTRACT_ID,
     COUPON_DEFAULT_ISSUE_COUNT
 )
@@ -85,14 +84,14 @@ class TestExcelParsing:
     """Test _fetch_coupons_from_excel() method"""
 
     def test_fetch_coupons_valid_file(self, tmp_path):
-        """Read valid Excel file with 6 columns"""
+        """Read valid Excel file with 9 columns"""
         excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["테스트쿠폰1", "즉시할인", 30, "정률할인", 10, "", "123456789"])  # 즉시할인: 발급개수 빈값
-        ws.append(["테스트쿠폰2", "다운로드쿠폰", 15, "정액할인", 500, 100, "987654321, 111222333"])  # 다운로드: 할인 + 발급개수
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["테스트쿠폰1", "즉시할인", 30, "정률할인", 10, "", 5000, "", "123456789"])  # 즉시할인
+        ws.append(["테스트쿠폰2", "다운로드쿠폰", 15, "정액할인", 500, 10000, 10000, 100, "987654321, 111222333"])  # 다운로드
         wb.save(excel_file)
 
         issuer = CouponIssuer(
@@ -112,16 +111,20 @@ class TestExcelParsing:
         assert coupons[0]['validity_days'] == 30
         assert coupons[0]['discount_type'] == "RATE"
         assert coupons[0]['discount'] == 10  # Column E
-        assert coupons[0]['issue_count'] is None  # 즉시할인: None
-        assert coupons[0]['vendor_items'] == [123456789]  # Column G
+        assert coupons[0]['min_purchase_price'] is None  # Column F: 즉시할인은 None
+        assert coupons[0]['max_discount_price'] == 5000  # Column G
+        assert coupons[0]['issue_count'] is None  # Column H: 즉시할인은 None
+        assert coupons[0]['vendor_items'] == [123456789]  # Column I
 
         assert coupons[1]['name'] == "테스트쿠폰2"
         assert coupons[1]['type'] == "다운로드쿠폰"
         assert coupons[1]['validity_days'] == 15
         assert coupons[1]['discount_type'] == "PRICE"
         assert coupons[1]['discount'] == 500  # Column E
-        assert coupons[1]['issue_count'] == 100  # Column F
-        assert coupons[1]['vendor_items'] == [987654321, 111222333]  # Column G
+        assert coupons[1]['min_purchase_price'] == 10000  # Column F
+        assert coupons[1]['max_discount_price'] == 10000  # Column G
+        assert coupons[1]['issue_count'] == 100  # Column H
+        assert coupons[1]['vendor_items'] == [987654321, 111222333]  # Column I
 
     def test_fetch_coupons_missing_columns(self, tmp_path):
         """Raise ValueError when required columns missing"""
@@ -152,10 +155,10 @@ class TestExcelParsing:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "즉시할인", 30, "정률할인", 50, "", "123456789"])
-        ws.append([None, None, None, None, None, None, None])  # Empty row
-        ws.append(["쿠폰2", "다운로드쿠폰", 15, "정액할인", 1000, 100, "987654321"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["쿠폰1", "즉시할인", 30, "정률할인", 50, "", 5000, "", "123456789"])
+        ws.append([None, None, None, None, None, None, None, None, None])  # Empty row
+        ws.append(["쿠폰2", "다운로드쿠폰", 15, "정액할인", 1000, 10000, 10000, 100, "987654321"])
         wb.save(excel_file)
 
         issuer = CouponIssuer(
@@ -199,8 +202,8 @@ class TestInputNormalization:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["  테스트쿠폰  ", "즉시할인", 30, "정률할인", 50, "", "123456789"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["  테스트쿠폰  ", "즉시할인", 30, "정률할인", 50, "", 5000, "", "123456789"])
         wb.save(excel_file)
 
         issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
@@ -215,9 +218,9 @@ class TestInputNormalization:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "즉 시 할 인", 30, "정률할인", 50, "", "123456789"])
-        ws.append(["쿠폰2", "다운로 드쿠폰", 15, "정액할인", 1000, 100, "987654321"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["쿠폰1", "즉 시 할 인", 30, "정률할인", 50, "", 5000, "", "123456789"])
+        ws.append(["쿠폰2", "다운로 드쿠폰", 15, "정액할인", 1000, 10000, 10000, 100, "987654321"])
         wb.save(excel_file)
 
         issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
@@ -233,9 +236,9 @@ class TestInputNormalization:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "즉시할인", "30일", "정률할인", 50, "", "123456789"])
-        ws.append(["쿠폰2", "다운로드쿠폰", "15 days", "정액할인", 1000, 100, "987654321"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["쿠폰1", "즉시할인", "30일", "정률할인", 50, "", 5000, "", "123456789"])
+        ws.append(["쿠폰2", "다운로드쿠폰", "15 days", "정액할인", 1000, 10000, 10000, 100, "987654321"])
         wb.save(excel_file)
 
         issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
@@ -251,10 +254,10 @@ class TestInputNormalization:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "즉시할인", 30, "정률할인", 50, "", "123456789"])
-        ws.append(["쿠폰2", "다운로드쿠폰", 15, "수량별 정액할인", 3, 1000, "987654321"])
-        ws.append(["쿠폰3", "즉시할인", 7, "정액할인", 100, "", "111222333"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["쿠폰1", "즉시할인", 30, "정률할인", 50, "", 5000, "", "123456789"])
+        ws.append(["쿠폰2", "다운로드쿠폰", 15, "수량별 정액할인", 3, 10000, 10000, 1000, "987654321"])
+        ws.append(["쿠폰3", "즉시할인", 7, "정액할인", 100, "", 5000, "", "111222333"])
         wb.save(excel_file)
 
         issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
@@ -271,9 +274,9 @@ class TestInputNormalization:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "즉시할인", 30, "정률할인", "10%", "", "123456789"])
-        ws.append(["쿠폰2", "다운로드쿠폰", 15, "정액할인", "500 원", "100개", "987654321"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["쿠폰1", "즉시할인", 30, "정률할인", "10%", "", 5000, "", "123456789"])
+        ws.append(["쿠폰2", "다운로드쿠폰", 15, "정액할인", "500 원", 10000, 10000, "100개", "987654321"])
         wb.save(excel_file)
 
         issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
@@ -300,10 +303,10 @@ class TestValidation:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "다운로드쿠폰", 30, "정률할인", 1, 100, "123456789"])
-        ws.append(["쿠폰2", "다운로드쿠폰", 30, "정률할인", 50, 100, "123456789"])
-        ws.append(["쿠폰3", "다운로드쿠폰", 30, "정률할인", 99, 100, "123456789"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["쿠폰1", "다운로드쿠폰", 30, "정률할인", 1, 10000, 5000, 100, "123456789"])
+        ws.append(["쿠폰2", "다운로드쿠폰", 30, "정률할인", 50, 10000, 10000, 100, "123456789"])
+        ws.append(["쿠폰3", "다운로드쿠폰", 30, "정률할인", 99, 10000, 20000, 100, "123456789"])
         wb.save(excel_file)
 
         issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
@@ -316,8 +319,8 @@ class TestValidation:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "다운로드쿠폰", 30, "정률할인", 0, 100, "123456789"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["쿠폰1", "다운로드쿠폰", 30, "정률할인", 0, 10000, 5000, 100, "123456789"])
         wb.save(excel_file)
 
         with pytest.raises(ValueError) as exc_info:
@@ -330,8 +333,8 @@ class TestValidation:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "다운로드쿠폰", 30, "정률할인", 100, 100, "123456789"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["쿠폰1", "다운로드쿠폰", 30, "정률할인", 100, 10000, 20000, 100, "123456789"])
         wb.save(excel_file)
 
         with pytest.raises(ValueError) as exc_info:
@@ -345,11 +348,11 @@ class TestValidation:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "즉시할인", 30, "정률할인", 1, "", "123456789"])
-        ws.append(["쿠폰2", "즉시할인", 30, "정률할인", 50, "", "123456789"])
-        ws.append(["쿠폰3", "즉시할인", 30, "정률할인", 99, "", "123456789"])
-        ws.append(["쿠폰4", "즉시할인", 30, "정률할인", 100, "", "123456789"])  # 100% allowed for instant
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["쿠폰1", "즉시할인", 30, "정률할인", 1, "", 5000, "", "123456789"])
+        ws.append(["쿠폰2", "즉시할인", 30, "정률할인", 50, "", 10000, "", "123456789"])
+        ws.append(["쿠폰3", "즉시할인", 30, "정률할인", 99, "", 20000, "", "123456789"])
+        ws.append(["쿠폰4", "즉시할인", 30, "정률할인", 100, "", 50000, "", "123456789"])  # 100% allowed for instant
         wb.save(excel_file)
 
         issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
@@ -362,8 +365,8 @@ class TestValidation:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "즉시할인", 30, "정률할인", 101, "", "123456789"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["쿠폰1", "즉시할인", 30, "정률할인", 101, "", 5000, "", "123456789"])
         wb.save(excel_file)
 
         with pytest.raises(ValueError) as exc_info:
@@ -377,9 +380,9 @@ class TestValidation:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "다운로드쿠폰", 30, "정액할인", 10, 100, "123456789"])
-        ws.append(["쿠폰2", "다운로드쿠폰", 30, "정액할인", 100, 100, "123456789"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["쿠폰1", "다운로드쿠폰", 30, "정액할인", 10, 10000, 10, 100, "123456789"])
+        ws.append(["쿠폰2", "다운로드쿠폰", 30, "정액할인", 100, 10000, 100, 100, "123456789"])
         wb.save(excel_file)
 
         issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
@@ -392,8 +395,8 @@ class TestValidation:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "다운로드쿠폰", 30, "정액할인", 5, 100, "123456789"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["쿠폰1", "다운로드쿠폰", 30, "정액할인", 5, 10000, 5, 100, "123456789"])
         wb.save(excel_file)
 
         with pytest.raises(ValueError) as exc_info:
@@ -407,10 +410,10 @@ class TestValidation:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "다운로드쿠폰", 30, "정액할인", 10, 100, "123456789"])
-        ws.append(["쿠폰2", "다운로드쿠폰", 30, "정액할인", 20, 100, "123456789"])
-        ws.append(["쿠폰3", "다운로드쿠폰", 30, "정액할인", 100, 100, "123456789"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["쿠폰1", "다운로드쿠폰", 30, "정액할인", 10, 10000, 10, 100, "123456789"])
+        ws.append(["쿠폰2", "다운로드쿠폰", 30, "정액할인", 20, 10000, 20, 100, "123456789"])
+        ws.append(["쿠폰3", "다운로드쿠폰", 30, "정액할인", 100, 10000, 100, 100, "123456789"])
         wb.save(excel_file)
 
         issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
@@ -423,8 +426,8 @@ class TestValidation:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "다운로드쿠폰", 30, "정액할인", 15, 100, "123456789"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["쿠폰1", "다운로드쿠폰", 30, "정액할인", 15, 10000, 15, 100, "123456789"])
         wb.save(excel_file)
 
         with pytest.raises(ValueError) as exc_info:
@@ -438,11 +441,11 @@ class TestValidation:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "즉시할인", 30, "정액할인", 1, "", "123456789"])
-        ws.append(["쿠폰2", "즉시할인", 30, "정액할인", 5, "", "123456789"])  # 5 won allowed
-        ws.append(["쿠폰3", "즉시할인", 30, "정액할인", 15, "", "123456789"])  # 15 won allowed
-        ws.append(["쿠폰4", "즉시할인", 30, "정액할인", 123, "", "123456789"])  # 123 won allowed
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["쿠폰1", "즉시할인", 30, "정액할인", 1, "", 1, "", "123456789"])
+        ws.append(["쿠폰2", "즉시할인", 30, "정액할인", 5, "", 5, "", "123456789"])  # 5 won allowed
+        ws.append(["쿠폰3", "즉시할인", 30, "정액할인", 15, "", 15, "", "123456789"])  # 15 won allowed
+        ws.append(["쿠폰4", "즉시할인", 30, "정액할인", 123, "", 123, "", "123456789"])  # 123 won allowed
         wb.save(excel_file)
 
         issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
@@ -455,8 +458,8 @@ class TestValidation:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "즉시할인", 30, "정액할인", 0, "", "123456789"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["쿠폰1", "즉시할인", 30, "정액할인", 0, "", 5000, "", "123456789"])
         wb.save(excel_file)
 
         with pytest.raises(ValueError) as exc_info:
@@ -475,8 +478,8 @@ class TestIssuanceWorkflow:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["즉시할인쿠폰", "즉시할인", 30, "정액할인", 1000, "", "123456789"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["즉시할인쿠폰", "즉시할인", 30, "정액할인", 1000, "", 5000, "", "123456789"])
         wb.save(excel_file)
 
         # Mock API
@@ -497,7 +500,7 @@ class TestIssuanceWorkflow:
         request_body = requests_mock.last_request.json()
         assert request_body["name"] == "즉시할인쿠폰"
         assert request_body["contractId"] == 12345  # Mocked contract ID (numeric)
-        assert request_body["maxDiscountPrice"] == COUPON_MAX_DISCOUNT  # Numeric
+        assert request_body["maxDiscountPrice"] == 5000  # From Excel (numeric)
         assert request_body["discount"] == 1000  # Numeric
         assert request_body["type"] == "PRICE"
 
@@ -507,8 +510,8 @@ class TestIssuanceWorkflow:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["다운로드쿠폰", "다운로드쿠폰", 15, "정률할인", 50, 100, "123456789"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["다운로드쿠폰", "다운로드쿠폰", 15, "정률할인", 50, 10000, 10000, 100, "123456789"])
         wb.save(excel_file)
 
         # Mock API
@@ -540,8 +543,8 @@ class TestIssuanceWorkflow:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["실패쿠폰", "즉시할인", 30, "정액할인", 1000, "", "123456789"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["실패쿠폰", "즉시할인", 30, "정액할인", 1000, "", 5000, "", "123456789"])
         wb.save(excel_file)
 
         # Mock API failure
@@ -566,11 +569,11 @@ class TestIssuanceWorkflow:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["성공쿠폰1", "즉시할인", 30, "정액할인", 1000, "", "123456789"])
-        ws.append(["성공쿠폰2", "즉시할인", 30, "정액할인", 2000, "", "123456789"])
-        ws.append(["성공쿠폰3", "즉시할인", 30, "정액할인", 3000, "", "123456789"])
-        ws.append(["실패쿠폰", "즉시할인", 30, "정액할인", 4000, "", "123456789"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["성공쿠폰1", "즉시할인", 30, "정액할인", 1000, "", 5000, "", "123456789"])
+        ws.append(["성공쿠폰2", "즉시할인", 30, "정액할인", 2000, "", 5000, "", "123456789"])
+        ws.append(["성공쿠폰3", "즉시할인", 30, "정액할인", 3000, "", 5000, "", "123456789"])
+        ws.append(["실패쿠폰", "즉시할인", 30, "정액할인", 4000, "", 5000, "", "123456789"])
         wb.save(excel_file)
 
         issuer = CouponIssuer(tmp_path, "a", "s", "u", "test-vendor")
@@ -631,7 +634,7 @@ class TestIssuerEdgeCases:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
         # No data rows
         wb.save(excel_file)
         return tmp_path  # Return tmp_path so CouponIssuer can use it as base_dir
@@ -643,8 +646,8 @@ class TestIssuerEdgeCases:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "잘못된타입", 30, "INVALID", -10, "abc", "123456789"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["쿠폰1", "잘못된타입", 30, "INVALID", -10, "", 5000, "abc", "123456789"])
         wb.save(excel_file)
         return excel_file
 
@@ -658,6 +661,8 @@ class TestIssuerEdgeCases:
                 'validity_days': 30,
                 'discount_type': 'RATE',
                 'discount': 10,
+                'min_purchase_price': None,
+                'max_discount_price': 5000,
                 'issue_count': None,
                 'vendor_items': [123456789]
             }
@@ -707,8 +712,8 @@ class TestIssuerEdgeCases:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["테스트쿠폰", "즉시할인", 30, "정률할인", 10, "", "123456789"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["테스트쿠폰", "즉시할인", 30, "정률할인", 10, "", 5000, "", "123456789"])
         wb.save(excel_file)
 
         # Mock API to raise connection error (correct endpoint)
@@ -799,8 +804,8 @@ class TestIssuerEdgeCases:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["테스트쿠폰", "무료쿠폰", 30, "정률할인", 10, "", "123456789"])  # Invalid type
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["테스트쿠폰", "무료쿠폰", 30, "정률할인", 10, 10000, 5000, "", "123456789"])  # Invalid type
         wb.save(excel_file)
 
         issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
@@ -822,8 +827,8 @@ class TestIssuerEdgeCases:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["테스트쿠폰", "즉시할인", 30, "FREE", 10, "", "123456789"])  # Invalid method
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["테스트쿠폰", "즉시할인", 30, "FREE", 10, "", 5000, "", "123456789"])  # Invalid method
         wb.save(excel_file)
 
         issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
@@ -846,8 +851,8 @@ class TestIssuerEdgeCases:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["테스트쿠폰", "즉시할인", 30, "정률할인", "abc", "", "123456789"])  # Non-numeric becomes 0
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["테스트쿠폰", "즉시할인", 30, "정률할인", "abc", "", 5000, "", "123456789"])  # Non-numeric becomes 0
         wb.save(excel_file)
 
         issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
@@ -869,8 +874,8 @@ class TestIssuerEdgeCases:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["테스트쿠폰", "다운로드쿠폰", 30, "정률할인", 10, 0, "123456789"])  # issue_count=0
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["테스트쿠폰", "다운로드쿠폰", 30, "정률할인", 10, 10000, 5000, 0, "123456789"])  # issue_count=0
         wb.save(excel_file)
 
         issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
@@ -892,8 +897,8 @@ class TestIssuerEdgeCases:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["테스트쿠폰", "다운로드쿠폰", 30, "정률할인", 10, "xyz", "123456789"])  # Non-numeric -> default value
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["테스트쿠폰", "다운로드쿠폰", 30, "정률할인", 10, 10000, 5000, "xyz", "123456789"])  # Non-numeric -> default value
         wb.save(excel_file)
 
         issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
@@ -915,8 +920,8 @@ class TestIssuerEdgeCases:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["테스트쿠폰", "즉시할인", 30, "수량별 정액할인", 0, "", "123456789"])  # discount=0
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["테스트쿠폰", "즉시할인", 30, "수량별 정액할인", 0, "", 5000, "", "123456789"])  # discount=0
         wb.save(excel_file)
 
         issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")

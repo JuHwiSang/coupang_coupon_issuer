@@ -9,7 +9,6 @@ from .coupang_api import CoupangAPIClient
 from .config import (
     get_base_dir,
     get_excel_file,
-    COUPON_MAX_DISCOUNT,
     COUPON_CONTRACT_ID,
     COUPON_DEFAULT_ISSUE_COUNT,
     POLLING_MAX_RETRIES,
@@ -181,12 +180,16 @@ class CouponIssuer:
         validity_days = coupon.get('validity_days', 1)
         discount_type = coupon.get('discount_type', 'PRICE')
         discount = coupon.get('discount', 0)  # Column E: 할인금액/비율 (필수)
-        issue_count = coupon.get('issue_count')  # Column F: 발급개수 (선택적)
-        vendor_items = coupon.get('vendor_items', [])  # Column G: 옵션ID 리스트 (필수)
+        min_purchase_price = coupon.get('min_purchase_price')  # Column F: 최소구매금액 (다운로드쿠폰 전용)
+        max_discount_price = coupon.get('max_discount_price', 0)  # Column G: 최대할인금액 (필수)
+        issue_count = coupon.get('issue_count')  # Column H: 발급개수 (선택적)
+        vendor_items = coupon.get('vendor_items', [])  # Column I: 옵션ID 리스트 (필수)
 
         # Validate required fields
         if discount <= 0:
             raise ValueError(f"할인금액/비율이 설정되지 않았습니다: {coupon_name}")
+        if max_discount_price <= 0:
+            raise ValueError(f"최대할인금액이 설정되지 않았습니다: {coupon_name}")
         if not vendor_items:
             raise ValueError(f"옵션ID가 설정되지 않았습니다: {coupon_name}")
 
@@ -215,7 +218,8 @@ class CouponIssuer:
                     discount=discount,
                     start_date=start_date,
                     end_date=end_date,
-                    vendor_items=vendor_items
+                    vendor_items=vendor_items,
+                    max_discount_price=max_discount_price
                 )
                 result['status'] = '성공'
 
@@ -228,7 +232,9 @@ class CouponIssuer:
                     start_date=start_date,
                     end_date=end_date,
                     vendor_items=vendor_items,
-                    validity_days=validity_days
+                    validity_days=validity_days,
+                    min_purchase_price=min_purchase_price,
+                    max_discount_price=max_discount_price
                 )
                 result['status'] = '성공'
 
@@ -251,7 +257,8 @@ class CouponIssuer:
         discount: int,
         start_date: str,
         end_date: str,
-        vendor_items: List[int]
+        vendor_items: List[int],
+        max_discount_price: int
     ) -> str:
         """
         즉시할인쿠폰 발급 (비동기 워크플로우)
@@ -263,6 +270,7 @@ class CouponIssuer:
             start_date: 유효 시작일
             end_date: 유효 종료일
             vendor_items: 옵션ID 리스트
+            max_discount_price: 최대 할인금액 (Excel 값)
 
         Returns:
             성공 메시지 문자열
@@ -277,7 +285,7 @@ class CouponIssuer:
             vendor_id=self.vendor_id,
             contract_id=self.contract_id,
             name=coupon_name,
-            max_discount_price=COUPON_MAX_DISCOUNT,
+            max_discount_price=max_discount_price,  # Excel 값 사용
             discount=discount,
             start_at=start_date,
             end_at=end_date,
@@ -323,7 +331,9 @@ class CouponIssuer:
         start_date: str,
         end_date: str,
         vendor_items: List[int],
-        validity_days: int
+        validity_days: int,
+        min_purchase_price: int,
+        max_discount_price: int
     ) -> str:
         """
         다운로드쿠폰 발급 (동기 API)
@@ -337,6 +347,8 @@ class CouponIssuer:
             end_date: 유효 종료일
             vendor_items: 옵션ID 리스트
             validity_days: 유효기간 (일)
+            min_purchase_price: 최소 구매금액 (Excel 값, 기본값 1)
+            max_discount_price: 최대 할인금액 (Excel 값)
 
         Returns:
             성공 메시지 문자열
@@ -352,9 +364,9 @@ class CouponIssuer:
             "title": coupon_name,
             "typeOfDiscount": discount_type,
             "description": f"{coupon_name} ({validity_days}일간 유효)",
-            "minimumPrice": 0,  # 최소 구매금액 제한 없음
+            "minimumPrice": min_purchase_price,  # Excel 값 사용 (기본값 1)
             "discount": discount,
-            "maximumDiscountPrice": COUPON_MAX_DISCOUNT,
+            "maximumDiscountPrice": max_discount_price,  # Excel 값 사용
             "maximumPerDaily": issue_count
         }
 

@@ -23,9 +23,9 @@ class TestVerifyCommand:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["테스트쿠폰1", "즉시할인", 30, "정률할인", 10, "", "123456789"])
-        ws.append(["테스트쿠폰2", "다운로드쿠폰", 15, "정액할인", 500, 100, "987654321"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["테스트쿠폰1", "즉시할인", 30, "정률할인", 10, "", 5000, "", "123456789"])
+        ws.append(["테스트쿠폰2", "다운로드쿠폰", 15, "정액할인", 500, 1000, 10000, 100, "987654321"])
         wb.save(excel_file)
 
         # Create args object
@@ -51,8 +51,8 @@ class TestVerifyCommand:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "즉시할인", 30, "정률할인", 10, "", "123456789"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["쿠폰1", "즉시할인", 30, "정률할인", 10, "", 5000, "", "123456789"])
         wb.save(excel_file)
 
         # Change to tmp_path directory
@@ -111,8 +111,8 @@ class TestVerifyCommand:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["할인쿠폰", "즉시할인", 30, "정률할인", 15, "", "123456789"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["할인쿠폰", "즉시할인", 30, "정률할인", 15, "", 5000, "", "123456789"])
         wb.save(excel_file)
 
         args = MagicMock()
@@ -131,8 +131,8 @@ class TestVerifyCommand:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["금액쿠폰", "다운로드쿠폰", 15, "정액할인", 1000, 50, "123456789"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["금액쿠폰", "다운로드쿠폰", 15, "정액할인", 1000, 1000, 10000, 50, "123456789"])
         wb.save(excel_file)
 
         args = MagicMock()
@@ -152,8 +152,8 @@ class TestVerifyCommand:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["예산쿠폰", "다운로드쿠폰", 30, "정액할인", 500, 100, "123456789"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["예산쿠폰", "다운로드쿠폰", 30, "정액할인", 500, 1000, 5000, 100, "123456789"])
         wb.save(excel_file)
 
         args = MagicMock()
@@ -171,8 +171,8 @@ class TestVerifyCommand:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["커스텀쿠폰", "즉시할인", 30, "정률할인", 10, "", "123456789"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["커스텀쿠폰", "즉시할인", 30, "정률할인", 10, "", 5000, "", "123456789"])
         wb.save(excel_file)
 
         args = MagicMock()
@@ -192,8 +192,8 @@ class TestVerifyCommand:
         wb1 = Workbook()
         ws1 = wb1.active
         assert ws1 is not None
-        ws1.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws1.append(["기본쿠폰", "즉시할인", 30, "정률할인", 10, "", "123456789"])
+        ws1.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws1.append(["기본쿠폰", "즉시할인", 30, "정률할인", 10, "", 5000, "", "123456789"])
         wb1.save(default_file)
 
         # Create custom.xlsx in another location
@@ -201,8 +201,8 @@ class TestVerifyCommand:
         wb2 = Workbook()
         ws2 = wb2.active
         assert ws2 is not None
-        ws2.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws2.append(["커스텀쿠폰", "다운로드쿠폰", 15, "정액할인", 500, 100, "987654321"])
+        ws2.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws2.append(["커스텀쿠폰", "다운로드쿠폰", 15, "정액할인", 500, 1000, 5000, 100, "987654321"])
         wb2.save(custom_file)
 
         args = MagicMock()
@@ -234,8 +234,8 @@ class TestVerifyCommand:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["특별쿠폰", "즉시할인", 30, "정률할인", 5, "", "123456789"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["특별쿠폰", "즉시할인", 30, "정률할인", 5, "", 5000, "", "123456789"])
         wb.save(excel_file)
 
         args = MagicMock()
@@ -473,8 +473,8 @@ class TestMainFunction:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰", "즉시할인", 30, "정률할인", 10, "", "123456789"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["쿠폰", "즉시할인", 30, "정률할인", 10, "", 5000, "", "123456789"])
         wb.save(excel_file)
 
         mocker.patch('sys.argv', ['main.py', 'verify', str(excel_file)])

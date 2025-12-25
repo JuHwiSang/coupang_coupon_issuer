@@ -45,8 +45,9 @@ def get_log_file(base_dir: Path) -> Path:
 # 레거시 경로 (제거 예정)
 EXCEL_RESULT_DIR = "results"  # ADR 009에서 결과 출력 제거로 사용하지 않음
 
-# 쿠폰 발급 고정값
-COUPON_MAX_DISCOUNT = 100000  # 최대 할인금액 (10만원)
+# 쿠폰 발급 기본값
+# 최대할인금액은 Excel에서 입력받음 (ADR 021)
+COUPON_MIN_PURCHASE_PRICE = 1  # 최소 구매금액 기본값 (다운로드쿠폰 전용, ADR 021)
 COUPON_CONTRACT_ID = -1  # 계약서 ID 고정값
 COUPON_DEFAULT_ISSUE_COUNT = 1  # 다운로드쿠폰 발급개수 기본값 (Column F가 비어있을 때)
 

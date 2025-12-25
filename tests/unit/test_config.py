@@ -14,7 +14,6 @@ from coupang_coupon_issuer.config import (
     get_config_file,
     get_excel_file,
     get_log_file,
-    COUPON_MAX_DISCOUNT,
     COUPON_CONTRACT_ID,
 )
 
@@ -59,9 +58,6 @@ class TestConstants:
 
     def test_service_name(self):
         assert SERVICE_NAME == "coupang_coupon_issuer"
-
-    def test_coupon_max_discount(self):
-        assert COUPON_MAX_DISCOUNT == 100000
 
     def test_coupon_contract_id(self):
         assert COUPON_CONTRACT_ID == -1

@@ -44,9 +44,9 @@ class TestFetchCouponsFromExcel:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["테스트쿠폰1", "즉시할인", 30, "정률할인", 10, "", "123456789"])
-        ws.append(["테스트쿠폰2", "다운로드쿠폰", 15, "정액할인", 500, 100, "987654321,111222333"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["테스트쿠폰1", "즉시할인", 30, "정률할인", 10, "", 5000, "", "123456789"])
+        ws.append(["테스트쿠폰2", "다운로드쿠폰", 15, "정액할인", 500, 10000, 500, 100, "987654321,111222333"])
         wb.save(excel_file)
 
         coupons = fetch_coupons_from_excel(excel_file)
@@ -101,10 +101,10 @@ class TestFetchCouponsFromExcel:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "즉시할인", 30, "정률할인", 10, "", "123"])
-        ws.append(["쿠폰2", "즉시할인", 30, "정액할인", 100, "", "456"])
-        ws.append(["쿠폰3", "즉시할인", 30, "수량별 정액할인", 5, "", "789"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["쿠폰1", "즉시할인", 30, "정률할인", 10, "", 5000, "", "123"])
+        ws.append(["쿠폰2", "즉시할인", 30, "정액할인", 100, "", 100, "", "456"])
+        ws.append(["쿠폰3", "즉시할인", 30, "수량별 정액할인", 5, "", 5000, "", "789"])
         wb.save(excel_file)
 
         coupons = fetch_coupons_from_excel(excel_file)
@@ -119,8 +119,8 @@ class TestFetchCouponsFromExcel:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "즉시할인", 30, "무료할인", 10, "", "123"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["쿠폰1", "즉시할인", 30, "무료할인", 10, "", 5000, "", "123"])
         wb.save(excel_file)
 
         with pytest.raises(ValueError) as exc_info:
@@ -134,8 +134,8 @@ class TestFetchCouponsFromExcel:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "다운로드쿠폰", 30, "정률할인", 100, 100, "123"])  # 100% not allowed
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["쿠폰1", "다운로드쿠폰", 30, "정률할인", 100, 10000, 20000, 100, "123"])  # 100% not allowed
         wb.save(excel_file)
 
         with pytest.raises(ValueError) as exc_info:
@@ -149,8 +149,8 @@ class TestFetchCouponsFromExcel:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "즉시할인", 30, "정률할인", 100, "", "123"])  # 100% allowed
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["쿠폰1", "즉시할인", 30, "정률할인", 100, "", 50000, "", "123"])  # 100% allowed
         wb.save(excel_file)
 
         coupons = fetch_coupons_from_excel(excel_file)
@@ -163,8 +163,8 @@ class TestFetchCouponsFromExcel:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "다운로드쿠폰", 30, "정액할인", 5, 100, "123"])  # < 10
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["쿠폰1", "다운로드쿠폰", 30, "정액할인", 5, 10000, 5, 100, "123"])  # < 10
         wb.save(excel_file)
 
         with pytest.raises(ValueError) as exc_info:
@@ -178,8 +178,8 @@ class TestFetchCouponsFromExcel:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "즉시할인", 30, "정률할인", 10, "", "123, 456, 789"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["쿠폰1", "즉시할인", 30, "정률할인", 10, "", 5000, "", "123, 456, 789"])
         wb.save(excel_file)
 
         coupons = fetch_coupons_from_excel(excel_file)
@@ -191,10 +191,10 @@ class TestFetchCouponsFromExcel:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "즉시할인", 30, "정률할인", 10, "", "123"])
-        ws.append([None, None, None, None, None, None, None])  # Empty row
-        ws.append(["쿠폰2", "다운로드쿠폰", 15, "정액할인", 100, 50, "456"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["쿠폰1", "즉시할인", 30, "정률할인", 10, "", 5000, "", "123"])
+        ws.append([None, None, None, None, None, None, None, None, None])  # Empty row
+        ws.append(["쿠폰2", "다운로드쿠폰", 15, "정액할인", 100, 10000, 100, 50, "456"])
         wb.save(excel_file)
 
         coupons = fetch_coupons_from_excel(excel_file)
@@ -206,8 +206,8 @@ class TestFetchCouponsFromExcel:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "즉 시 할 인", 30, "정률할인", 10, "", "123"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["쿠폰1", "즉 시 할 인", 30, "정률할인", 10, "", 5000, "", "123"])
         wb.save(excel_file)
 
         coupons = fetch_coupons_from_excel(excel_file)
@@ -219,8 +219,8 @@ class TestFetchCouponsFromExcel:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "즉시할인", "30일", "정률할인", "10%", "", "123"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["쿠폰1", "즉시할인", "30일", "정률할인", "10%", "", 5000, "", "123"])
         wb.save(excel_file)
 
         coupons = fetch_coupons_from_excel(excel_file)
@@ -233,8 +233,8 @@ class TestFetchCouponsFromExcel:
         wb = Workbook()
         ws = wb.active
         assert ws is not None
-        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "발급개수", "옵션 ID"])
-        ws.append(["쿠폰1", "즉시할인", 30, "정률할인", 10, "", "123"])
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션 ID"])
+        ws.append(["쿠폰1", "즉시할인", 30, "정률할인", 10, "", 5000, "", "123"])
         wb.save(excel_file)
 
         coupons = fetch_coupons_from_excel(excel_file)

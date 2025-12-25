@@ -4,6 +4,73 @@
 
 ---
 
+## 2025-12-26
+
+### Excel 구조 확장: 7컬럼 → 9컬럼 (ADR 021)
+
+**목적**: 최대할인금액과 최소구매금액을 하드코딩에서 Excel 설정으로 이동
+
+**변경사항**:
+- **최대할인금액** (Column G): 정률할인 시 최대 할인 금액 (필수, 모든 쿠폰)
+  - 기존: `config.py`의 `COUPON_MAX_DISCOUNT = 100000` 상수
+  - 변경: Excel에서 쿠폰별로 지정
+  - 검증: 1원 이상 필수
+- **최소구매금액** (Column F): 쿠폰 사용 최소 구매 조건 (다운로드쿠폰 전용, 선택적)
+  - 기존: `issuer.py`의 `minimumPrice: 0` 하드코딩
+  - 변경: Excel에서 지정, 비어있으면 기본값 1원
+  - 검증: 1원 이상, 즉시할인쿠폰은 무시
+
+**새로운 컬럼 순서** (9컬럼):
+1. 쿠폰이름
+2. 쿠폰타입
+3. 쿠폰유효기간
+4. 할인방식
+5. 할인금액/비율
+6. **최소구매금액** (신규, 다운로드쿠폰 전용)
+7. **최대할인금액** (신규)
+8. 발급개수 (다운로드쿠폰 전용)
+9. 옵션ID
+
+**config.py 변경**:
+```python
+# 제거
+# COUPON_MAX_DISCOUNT = 100000
+
+# 추가
+COUPON_MIN_PURCHASE_PRICE = 1  # 최소 구매금액 기본값
+```
+
+**reader.py 변경**:
+- 9컬럼 헤더 검증
+- 최소구매금액 파싱 로직 추가 (다운로드쿠폰만, 기본값 1)
+- 최대할인금액 파싱 로직 추가 (필수, 1 이상)
+- 반환 딕셔너리에 `min_purchase_price`, `max_discount_price` 추가
+
+**issuer.py 변경**:
+- `COUPON_MAX_DISCOUNT` import 제거
+- `_issue_instant_coupon`: `max_discount_price` 파라미터 추가
+- `_issue_download_coupon`: `min_purchase_price`, `max_discount_price` 파라미터 추가
+- API 호출 시 Excel 값 사용
+
+**main.py 변경**:
+- `cmd_verify`: 최소구매금액, 최대할인금액 컬럼 표시 추가
+- 헤더: 9개 → 11개 (No, 쿠폰이름, 쿠폰타입, 유효기간, 할인방식, 할인금액, 할인비율, **최소구매**, **최대할인**, 발급개수, 총 예산)
+
+**generate_example.py 변경**:
+- 9컬럼 헤더 생성
+- 최소구매금액, 최대할인금액 컬럼 주석 추가
+  - 다운로드쿠폰 전용 컬럼에 "⚠ 이 컬럼은 다운로드쿠폰일 때만 사용합니다" 명시
+- 예제 데이터 업데이트 (basic.xlsx, comprehensive.xlsx, edge_cases.xlsx)
+
+**ADR 업데이트**:
+- ADR 021 작성: 9컬럼 구조 결정 문서
+- ADR 004 업데이트: `COUPON_MAX_DISCOUNT` 제거 기록
+- ADR 015 수정: Deprecated 표시 정정 (ADR 009만 표시)
+
+**참조**: [ADR 021](adr/021-excel-9-column-structure.md)
+
+---
+
 ## 2024-12-16
 
 ### 로깅 규칙

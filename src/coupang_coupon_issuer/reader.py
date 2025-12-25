@@ -51,8 +51,12 @@ def fetch_coupons_from_excel(excel_path: Path) -> List[Dict[str, Any]]:
         # 헤더 읽기 (첫 번째 행)
         headers = [cell.value for cell in sheet[1]]  # type: ignore
 
-        # 필수 컬럼 체크
-        required_columns = ['쿠폰이름', '쿠폰타입', '쿠폰유효기간', '할인방식', '할인금액/비율', '발급개수', '옵션ID']
+        # 필수 컬럼 체크 (9개)
+        required_columns = [
+            '쿠폰이름', '쿠폰타입', '쿠폰유효기간', '할인방식', 
+            '할인금액/비율', '최소구매금액', '최대할인금액',
+            '발급개수', '옵션ID'
+        ]
 
         for col in required_columns:
             # 옵션ID는 "옵션 ID" (공백 포함)도 허용 (ADR 002 입력 정규화)
@@ -121,7 +125,39 @@ def fetch_coupons_from_excel(excel_path: Path) -> List[Dict[str, Any]]:
             if discount <= 0:
                 raise ValueError(f"행 {row_idx}: 할인금액/비율은 0보다 커야 합니다")
 
-            # 6. 발급개수: 선택적 (쿠폰 타입에 따라 처리)
+            # 6. 최소구매금액 (Column F): 다운로드쿠폰 전용, 최소 구매 조건 (선택적, 기본값 1)
+            min_purchase_raw = str(row[col_indices['최소구매금액']]).strip()
+            min_purchase_price = None
+
+            if coupon_type == '다운로드쿠폰':
+                # 다운로드쿠폰: 사용자 입력 또는 기본값 1원
+                if min_purchase_raw and min_purchase_raw != 'None':
+                    min_purchase_digits = re.sub(r'[^\d.]', '', min_purchase_raw)
+                    try:
+                        min_purchase_price = int(float(min_purchase_digits)) if min_purchase_digits else 1
+                    except (ValueError, TypeError):
+                        raise ValueError(f"행 {row_idx}: 최소구매금액은 숫자여야 합니다 (현재값: {min_purchase_raw})")
+                    
+                    if min_purchase_price < 1:
+                        raise ValueError(f"행 {row_idx}: 최소구매금액은 1원 이상이어야 합니다 (현재: {min_purchase_price})")
+                else:
+                    min_purchase_price = 1  # 기본값
+            elif coupon_type == '즉시할인':
+                # 즉시할인: 사용 안함
+                min_purchase_price = None
+
+            # 7. 최대할인금액 (Column G): 정률할인 시 최대 할인 금액 (필수, 양의 정수)
+            max_discount_raw = str(row[col_indices['최대할인금액']]).strip()
+            max_discount_digits = re.sub(r'[^\d.]', '', max_discount_raw)
+            try:
+                max_discount_price = int(float(max_discount_digits)) if max_discount_digits else 0
+            except (ValueError, TypeError):
+                raise ValueError(f"행 {row_idx}: 최대할인금액은 숫자여야 합니다 (현재값: {max_discount_raw})")
+
+            if max_discount_price <= 0:
+                raise ValueError(f"행 {row_idx}: 최대할인금액은 0보다 커야 합니다")
+
+            # 8. 발급개수: 선택적 (쿠폰 타입에 따라 처리)
             issue_count_raw = str(row[col_indices['발급개수']]).strip()
             issue_count = None
 
@@ -172,7 +208,7 @@ def fetch_coupons_from_excel(excel_path: Path) -> List[Dict[str, Any]]:
                     if discount < 1:
                         raise ValueError(f"행 {row_idx}: 즉시할인쿠폰 수량별 정액할인은 1 이상이어야 합니다 (현재: {discount})")
 
-            # 8. 옵션ID (Column G): 쉼표로 구분된 vendor item ID 리스트 (필수)
+            # 9. 옵션ID (Column I): 쉼표로 구분된 vendor item ID 리스트 (필수)
             vendor_items_raw = str(row[col_indices['옵션ID']]).strip()
 
             if not vendor_items_raw or vendor_items_raw == 'None':
@@ -208,8 +244,10 @@ def fetch_coupons_from_excel(excel_path: Path) -> List[Dict[str, Any]]:
                 'validity_days': validity_days,
                 'discount_type': discount_type,
                 'discount': discount,  # Column E: 할인금액/비율
-                'issue_count': issue_count,  # Column F: 발급개수 (None for instant coupons)
-                'vendor_items': vendor_items,  # Column G: 옵션ID 리스트
+                'min_purchase_price': min_purchase_price,  # Column F: 최소구매금액 (다운로드쿠폰 전용)
+                'max_discount_price': max_discount_price,  # Column G: 최대할인금액
+                'issue_count': issue_count,  # Column H: 발급개수 (None for instant coupons)
+                'vendor_items': vendor_items,  # Column I: 옵션ID 리스트
             }
 
             coupons.append(coupon)
