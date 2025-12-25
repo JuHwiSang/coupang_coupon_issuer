@@ -352,6 +352,7 @@ class CouponIssuer:
             "title": coupon_name,
             "typeOfDiscount": discount_type,
             "description": f"{coupon_name} ({validity_days}일간 유효)",
+            "minimumPrice": 0,  # 최소 구매금액 제한 없음
             "discount": discount,
             "maximumDiscountPrice": COUPON_MAX_DISCOUNT,
             "maximumPerDaily": issue_count

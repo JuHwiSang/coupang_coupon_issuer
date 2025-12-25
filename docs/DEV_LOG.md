@@ -915,3 +915,16 @@ uv run python main.py verify examples/
 - 검색 키워드: TODO, async, polling, REQUESTED
 
 ---
+
+### 다운로드쿠폰 minimumPrice 필드 추가 (2025-12-26)
+
+**문제**: 다운로드쿠폰 생성 시 policy에 `minimumPrice` 필드 누락
+
+**수정**:
+- `issuer.py`: policy 딕셔너리에 `minimumPrice: 0` 추가
+- 값: 0 (최소 구매금액 제한 없음)
+- API 문서에 명시된 필수 필드였으나 구현에서 누락됨
+
+**영향**: 기존 테스트는 이미 `minimumPrice`를 포함하고 있어서 테스트 수정 불필요
+
+**참조**: [download-coupon-api.md](../docs/coupang/download-coupon-api.md#policies-객체-필드)
