@@ -50,6 +50,10 @@ COUPON_MAX_DISCOUNT = 100000  # 최대 할인금액 (10만원)
 COUPON_CONTRACT_ID = -1  # 계약서 ID 고정값
 COUPON_DEFAULT_ISSUE_COUNT = 1  # 다운로드쿠폰 발급개수 기본값 (Column F가 비어있을 때)
 
+# 폴링 설정 (REQUESTED 상태 처리)
+POLLING_MAX_RETRIES = 5  # 최대 재시도 횟수
+POLLING_RETRY_INTERVAL = 2  # 재시도 간격 (초)
+
 
 class ConfigManager:
     """config.json 읽기/쓰기 + UUID 관리"""

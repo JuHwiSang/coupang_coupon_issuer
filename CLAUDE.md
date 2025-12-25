@@ -42,6 +42,7 @@
 - [ADR 017: 쿠폰 타입별 할인 검증 규칙 분리](docs/adr/017-coupon-type-specific-validation.md) - 다운로드/즉시할인 쿠폰 검증 분리
 - [ADR 018: 할인방식 한글 입력 지원](docs/adr/018-korean-discount-type-names.md) - 정률할인/수량별 정액할인/정액할인 한글 입력
 - [ADR 019: setup/install 명령어 분리](docs/adr/019-setup-install-separation.md) - **현재 구조**, 시스템/사용자 레벨 작업 분리, 파일 권한 정상화
+- [ADR 020: 즉시할인쿠폰 REQUESTED 상태 간단 폴링](docs/adr/020-instant-coupon-simple-polling.md) - **덕테이프 솔루션**, 5회 × 2초 폴링, 향후 async 리팩토링 필요
 
 ## 계약 타입 (Contract Types)
 

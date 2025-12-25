@@ -903,3 +903,15 @@ uv run python main.py verify examples/
 - [src/coupang_coupon_issuer/coupang_api.py](../src/coupang_coupon_issuer/coupang_api.py)
 
 ---
+
+## 2025-12-25
+
+### REQUESTED 상태 간단 폴링 구현 (ADR 020)
+
+**TODO: 향후 Async 리팩토링 필요**
+- 현재: 간단한 폴링 (5회 × 2초, 최대 10초 대기)
+- 향후: asyncio + httpx 기반 비동기 처리로 전환
+- 참조: ADR 020
+- 검색 키워드: TODO, async, polling, REQUESTED
+
+---

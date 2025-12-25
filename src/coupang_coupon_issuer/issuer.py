@@ -1,5 +1,6 @@
 """쿠폰 발급 로직 모듈"""
 
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, List, Dict, Any
@@ -11,6 +12,8 @@ from .config import (
     COUPON_MAX_DISCOUNT,
     COUPON_CONTRACT_ID,
     COUPON_DEFAULT_ISSUE_COUNT,
+    POLLING_MAX_RETRIES,
+    POLLING_RETRY_INTERVAL,
 )
 from .reader import fetch_coupons_from_excel, DISCOUNT_TYPE_KR_TO_EN, DISCOUNT_TYPE_EN_TO_KR
 
@@ -284,13 +287,9 @@ class CouponIssuer:
         req_id1 = response1.get('data', {}).get('content', {}).get('requestedId')
         assert req_id1 is not None, "즉시할인쿠폰 생성 실패 (requestedId 없음)"
 
-        # 2단계: 쿠폰 생성 상태 확인
-        response2 = self.api_client.get_instant_coupon_status(self.vendor_id, req_id1)
-        content2 = response2.get('data', {}).get('content', {})
-        status2 = content2.get('status')
-
-        assert status2 == 'DONE', f"즉시할인쿠폰 생성 실패 (status={status2})"
-
+        # 2단계: 쿠폰 생성 상태 확인 (폴링)
+        content2 = self._wait_for_done(req_id1, "즉시할인쿠폰 생성")
+        
         coupon_id = content2.get('couponId')
         assert coupon_id is not None, "즉시할인쿠폰 생성 실패 (couponId 없음)"
 
@@ -304,15 +303,14 @@ class CouponIssuer:
         req_id2 = response3.get('data', {}).get('content', {}).get('requestedId')
         assert req_id2 is not None, "즉시할인쿠폰 아이템 적용 실패 (requestedId 없음)"
 
-        # 4단계: 아이템 적용 상태 확인
-        response4 = self.api_client.get_instant_coupon_status(self.vendor_id, req_id2)
-        content4 = response4.get('data', {}).get('content', {})
-        status4 = content4.get('status')
-
-        if status4 != 'DONE':
-            failed_items = content4.get('failedVendorItems', [])
+        # 4단계: 아이템 적용 상태 확인 (폴링)
+        content4 = self._wait_for_done(req_id2, "즉시할인쿠폰 아이템 적용")
+        
+        # DONE 상태에서도 실패한 아이템이 있을 수 있음
+        failed_items = content4.get('failedVendorItems', [])
+        if failed_items:
             error_details = ', '.join([f"{item.get('vendorItemId')}: {item.get('reason')}" for item in failed_items])
-            raise AssertionError(f"즉시할인쿠폰 아이템 적용 실패 (status={status4}, 실패: {error_details})")
+            raise AssertionError(f"즉시할인쿠폰 아이템 적용 실패 (실패: {error_details})")
 
         return f"즉시할인쿠폰 생성 완료 (couponId: {coupon_id}, 옵션 {len(vendor_items)}개 적용)"
 
@@ -398,3 +396,62 @@ class CouponIssuer:
         except Exception as e:
             print(f"[{timestamp}] ERROR: 엑셀 파일 읽기 실패: {e}", flush=True)
             raise
+
+    def _wait_for_done(
+        self,
+        request_id: str,
+        operation_name: str,
+        max_retries: int = POLLING_MAX_RETRIES,
+        retry_interval: int = POLLING_RETRY_INTERVAL
+    ) -> Dict[str, Any]:
+        """
+        REQUESTED 상태를 폴링하여 DONE/FAIL 대기 (간단 폴링)
+        
+        TODO: 향후 async 리팩토링 필요
+        - 현재: 동기 폴링 (time.sleep 사용, 순차 처리)
+        - 향후: asyncio + httpx 기반 비동기 처리
+        - 참조: ADR 020, DEV_LOG.md (2025-12-25)
+        
+        Args:
+            request_id: 요청 ID
+            operation_name: 작업 이름 (로깅용)
+            max_retries: 최대 재시도 횟수 (기본 5회)
+            retry_interval: 재시도 간격 초 (기본 2초)
+        
+        Returns:
+            최종 상태 응답의 content 딕셔너리
+        
+        Raises:
+            AssertionError: FAIL 상태 또는 타임아웃
+        """
+        timestamp = self._timestamp()
+        
+        for attempt in range(max_retries + 1):  # 0부터 max_retries까지 (총 max_retries+1회)
+            response = self.api_client.get_instant_coupon_status(self.vendor_id, request_id)
+            content = response.get('data', {}).get('content', {})
+            status = content.get('status')
+            
+            if status == 'DONE':
+                if attempt > 0:
+                    print(f"[{timestamp}] {operation_name} 완료 (재시도 {attempt}회)", flush=True)
+                return content
+            
+            elif status == 'FAIL':
+                raise AssertionError(f"{operation_name} 실패 (status=FAIL)")
+            
+            elif status == 'REQUESTED':
+                if attempt < max_retries:
+                    print(f"[{timestamp}] {operation_name} 대기중... (재시도 {attempt + 1}/{max_retries})", flush=True)
+                    time.sleep(retry_interval)
+                else:
+                    # 최대 재시도 횟수 초과
+                    raise AssertionError(
+                        f"{operation_name} 타임아웃 "
+                        f"(최대 {max_retries}회 재시도, {max_retries * retry_interval}초 대기)"
+                    )
+            
+            else:
+                raise AssertionError(f"{operation_name} 알 수 없는 상태 (status={status})")
+        
+        # 이 코드에는 도달하지 않지만 타입 체커를 위해 추가
+        raise AssertionError(f"{operation_name} 예상치 못한 종료")
