@@ -74,14 +74,16 @@ mkdir -p ~/my-coupons
 cp /path/to/coupons.xlsx ~/my-coupons/
 ```
 
-**엑셀 파일 형식** (7개 컬럼):
+**엑셀 파일 형식** (9개 컬럼):
 1. 쿠폰이름
 2. 쿠폰타입 (즉시할인 / 다운로드쿠폰)
-3. 쿠폰유효기간 (일 단위, 예: 30)
+3. 쿠폰유효기간 (일 단위)
 4. 할인방식 (정률할인 / 정액할인 / 수량별 정액할인) - **한글로 입력**
-5. 할인금액/비율 (예: 10 = 10% 또는 1000 = 1000원)
-6. 발급개수 (즉시할인은 빈값, 다운로드쿠폰은 숫자)
-7. 옵션ID (쉼표로 구분된 vendor item ID, 예: 123,456,789)
+5. 할인금액/비율
+6. 최소구매금액 (다운로드쿠폰 전용, 비어있으면 10원)
+7. 최대할인금액 (필수, 정률할인 시 최대 할인 금액)
+8. 발급개수 (즉시할인은 빈값, 다운로드쿠폰은 숫자)
+9. 옵션ID (쉼표로 구분된 vendor item ID)
 
 **중요**: 엑셀 파일명은 반드시 `coupons.xlsx`여야 합니다.
 
@@ -296,6 +298,15 @@ uv run pytest tests/unit/test_issuer.py -v
 
 ## 문서
 
+### 사용자 문서
+
+- **[docs/USER_GUIDE.md](docs/USER_GUIDE.md) - 비개발자용 사용설명서** ⭐
+  - 엑셀 파일 작성부터 설치, 관리까지 단계별 가이드
+  - 명령어 최소화, 이해하기 쉬운 설명
+  - 중요 주의사항 및 문제 해결 방법 포함
+
+### 개발자 문서
+
 - [CLAUDE.md](CLAUDE.md) - Claude 개발 가이드
 - [docs/DEV_LOG.md](docs/DEV_LOG.md) - 작은 결정사항, 관례
 - [docs/adr/](docs/adr/) - 아키텍처 결정 기록 (ADR)
@@ -303,7 +314,11 @@ uv run pytest tests/unit/test_issuer.py -v
   - [ADR 015: 옵션ID 컬럼 추가](docs/adr/015-option-id-column.md) - 엑셀 7컬럼 구조
   - [ADR 017: 쿠폰 타입별 할인 검증 규칙 분리](docs/adr/017-coupon-type-specific-validation.md) - 쿠폰타입별 검증
   - [ADR 018: 할인방식 한글 입력 지원](docs/adr/018-korean-discount-type-names.md) - 한글 할인방식 입력
-  - [ADR 019: setup/install 명령어 분리](docs/adr/019-setup-install-separation.md) - **현재 구조**, 시스템/사용자 레벨 작업 분리
+  - [ADR 018: 할인방식 한글 입력 지원](docs/adr/018-korean-discount-type-names.md) - 한글 할인방식 입력
+- [ADR 019: setup/install 명령어 분리](docs/adr/019-setup-install-separation.md) - **현재 구조**
+- [ADR 020: 즉시할인쿠폰 간단 폴링](docs/adr/020-instant-coupon-simple-polling.md)
+- [ADR 021: Excel 9컬럼 구조](docs/adr/021-excel-9-column-structure.md) - **현재 구조**
+- [ADR 022: 다운로드쿠폰 타이밍 수정](docs/adr/022-download-coupon-timing-fix.md) - KST, 타임존 처리
 
 ## 주요 변경사항 (v3.0)
 
