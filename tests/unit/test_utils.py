@@ -24,11 +24,11 @@ class TestGetVisualWidth:
 
     def test_mixed_content(self):
         """Mixed ASCII and Korean should calculate correctly"""
-        # 즉시할인 = 4 Korean chars = 8 width
+        # 즉시할인쿠폰 = 6 Korean chars = 12 width
         # _ = 1 ASCII = 1 width  
         # 정률할인 = 4 Korean chars = 8 width
-        # Total = 17
-        assert get_visual_width("즉시할인_정률할인") == 17
+        # Total = 21
+        assert get_visual_width("즉시할인쿠폰_정률할인") == 21
         assert get_visual_width("쿠폰1") == 5  # 쿠폰 (4) + 1 (1)
         assert get_visual_width("No") == 2
 

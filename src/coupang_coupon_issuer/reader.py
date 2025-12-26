@@ -28,7 +28,7 @@ def fetch_coupons_from_excel(excel_path: Path) -> List[Dict[str, Any]]:
 
     엑셀 컬럼 (7개):
     1. 쿠폰이름
-    2. 쿠폰타입 (즉시할인 또는 다운로드쿠폰)
+    2. 쿠폰타입 (즉시할인쿠폰 또는 다운로드쿠폰)
     3. 쿠폰유효기간 (일 단위, 예: 2)
     4. 할인방식 (정률할인/수량별 정액할인/정액할인)
     5. 할인금액/비율 (discount value, 할인방식에 따라 의미 다름)
@@ -80,17 +80,17 @@ def fetch_coupons_from_excel(excel_path: Path) -> List[Dict[str, Any]]:
             # 1. 쿠폰이름: strip만 적용
             coupon_name = str(row[col_indices['쿠폰이름']]).strip()
 
-            # 2. 쿠폰타입: strip + 모든 공백 제거 + '즉시할인' or '다운로드쿠폰' 포함 체크
+            # 2. 쿠폰타입: strip + 모든 공백 제거 + '즉시할인쿠폰' or '다운로드쿠폰' 포함 체크
             coupon_type_raw = str(row[col_indices['쿠폰타입']]).strip()
             coupon_type_normalized = re.sub(r'\s+', '', coupon_type_raw)  # 모든 공백 제거
 
             if '즉시할인' in coupon_type_normalized:
-                coupon_type = '즉시할인'
+                coupon_type = '즉시할인쿠폰'  # 하위 호환: "즉시할인" 입력도 허용
             elif '다운로드쿠폰' in coupon_type_normalized:
                 coupon_type = '다운로드쿠폰'
             else:
                 raise ValueError(
-                    f"행 {row_idx}: 잘못된 쿠폰 타입 '{coupon_type_raw}' (즉시할인 또는 다운로드쿠폰만 가능)"
+                    f"행 {row_idx}: 잘못된 쿠폰 타입 '{coupon_type_raw}' (즉시할인쿠폰 또는 다운로드쿠폰만 가능)"
                 )
 
             # 3. 쿠폰유효기간: 숫자만 추출 -> float -> int
@@ -142,8 +142,8 @@ def fetch_coupons_from_excel(excel_path: Path) -> List[Dict[str, Any]]:
                         raise ValueError(f"행 {row_idx}: 최소구매금액은 1원 이상이어야 합니다 (현재: {min_purchase_price})")
                 else:
                     min_purchase_price = 10  # 기본값 (API 최소값: 10원)
-            elif coupon_type == '즉시할인':
-                # 즉시할인: 사용 안함
+            elif coupon_type == '즉시할인쿠폰':
+                # 즉시할인쿠폰: 사용 안함
                 min_purchase_price = None
 
             # 7. 최대할인금액 (Column G): 정률할인 시 최대 할인 금액 (필수, 양의 정수)
@@ -161,8 +161,8 @@ def fetch_coupons_from_excel(excel_path: Path) -> List[Dict[str, Any]]:
             issue_count_raw = str(row[col_indices['발급개수']]).strip()
             issue_count = None
 
-            # 즉시할인: 발급개수 무시 (API에서 사용 안함)
-            if coupon_type == '즉시할인':
+            # 즉시할인쿠폰: 발급개수 무시 (API에서 사용 안함)
+            if coupon_type == '즉시할인쿠폰':
                 issue_count = None  # Not used in API
 
             # 다운로드쿠폰: 발급개수 필요 (비어있으면 기본값)
@@ -193,8 +193,8 @@ def fetch_coupons_from_excel(excel_path: Path) -> List[Dict[str, Any]]:
                         raise ValueError(f"행 {row_idx}: 다운로드쿠폰 정액할인은 최소 10원 이상이어야 합니다 (현재: {discount})")
                     if discount % 10 != 0:
                         raise ValueError(f"행 {row_idx}: 다운로드쿠폰 정액할인은 10원 단위여야 합니다 (현재: {discount})")
-            elif coupon_type == '즉시할인':
-                # 즉시할인 쿠폰 검증 규칙
+            elif coupon_type == '즉시할인쿠폰':
+                # 즉시할인쿠폰 검증 규칙
                 if discount_type == 'RATE':
                     # 정률할인: 1~100% 범위 체크 (100% 허용)
                     if not (1 <= discount <= 100):
@@ -228,7 +228,7 @@ def fetch_coupons_from_excel(excel_path: Path) -> List[Dict[str, Any]]:
                 raise ValueError(f"행 {row_idx}: 옵션ID가 비어있습니다")
 
             # Coupang API 제한 검증
-            if coupon_type == '즉시할인' and len(vendor_items) > 10000:
+            if coupon_type == '즉시할인쿠폰' and len(vendor_items) > 10000:
                 raise ValueError(f"행 {row_idx}: 즉시할인쿠폰은 최대 10,000개의 옵션ID만 지원합니다 (현재: {len(vendor_items)}개)")
             elif coupon_type == '다운로드쿠폰' and len(vendor_items) > 100:
                 raise ValueError(f"행 {row_idx}: 다운로드쿠폰은 최대 100개의 옵션ID만 지원합니다 (현재: {len(vendor_items)}개)")

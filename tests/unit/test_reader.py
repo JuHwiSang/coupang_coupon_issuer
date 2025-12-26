@@ -45,7 +45,7 @@ class TestFetchCouponsFromExcel:
         ws = wb.active
         assert ws is not None
         ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
-        ws.append(["테스트쿠폰1", "즉시할인", 30, "정률할인", 10, "", 5000, "", "123456789"])
+        ws.append(["테스트쿠폰1", "즉시할인쿠폰", 30, "정률할인", 10, "", 5000, "", "123456789"])
         ws.append(["테스트쿠폰2", "다운로드쿠폰", 15, "정액할인", 500, 10000, 500, 100, "987654321,111222333"])
         wb.save(excel_file)
 
@@ -55,7 +55,7 @@ class TestFetchCouponsFromExcel:
         
         # First coupon
         assert coupons[0]['name'] == "테스트쿠폰1"
-        assert coupons[0]['type'] == "즉시할인"
+        assert coupons[0]['type'] == "즉시할인쿠폰"
         assert coupons[0]['validity_days'] == 30
         assert coupons[0]['discount_type'] == "RATE"
         assert coupons[0]['discount'] == 10
@@ -87,7 +87,7 @@ class TestFetchCouponsFromExcel:
         ws = wb.active
         assert ws is not None
         ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간"])  # Missing columns
-        ws.append(["쿠폰1", "즉시할인", 30])
+        ws.append(["쿠폰1", "즉시할인쿠폰", 30])
         wb.save(excel_file)
 
         with pytest.raises(ValueError) as exc_info:
@@ -102,9 +102,9 @@ class TestFetchCouponsFromExcel:
         ws = wb.active
         assert ws is not None
         ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "즉시할인", 30, "정률할인", 10, "", 5000, "", "123"])
-        ws.append(["쿠폰2", "즉시할인", 30, "정액할인", 100, "", 100, "", "456"])
-        ws.append(["쿠폰3", "즉시할인", 30, "수량별 정액할인", 5, "", 5000, "", "789"])
+        ws.append(["쿠폰1", "즉시할인쿠폰", 30, "정률할인", 10, "", 5000, "", "123"])
+        ws.append(["쿠폰2", "즉시할인쿠폰", 30, "정액할인", 100, "", 100, "", "456"])
+        ws.append(["쿠폰3", "즉시할인쿠폰", 30, "수량별 정액할인", 5, "", 5000, "", "789"])
         wb.save(excel_file)
 
         coupons = fetch_coupons_from_excel(excel_file)
@@ -120,7 +120,7 @@ class TestFetchCouponsFromExcel:
         ws = wb.active
         assert ws is not None
         ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "즉시할인", 30, "무료할인", 10, "", 5000, "", "123"])
+        ws.append(["쿠폰1", "즉시할인쿠폰", 30, "무료할인", 10, "", 5000, "", "123"])
         wb.save(excel_file)
 
         with pytest.raises(ValueError) as exc_info:
@@ -150,7 +150,7 @@ class TestFetchCouponsFromExcel:
         ws = wb.active
         assert ws is not None
         ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "즉시할인", 30, "정률할인", 100, "", 50000, "", "123"])  # 100% allowed
+        ws.append(["쿠폰1", "즉시할인쿠폰", 30, "정률할인", 100, "", 50000, "", "123"])  # 100% allowed
         wb.save(excel_file)
 
         coupons = fetch_coupons_from_excel(excel_file)
@@ -179,7 +179,7 @@ class TestFetchCouponsFromExcel:
         ws = wb.active
         assert ws is not None
         ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "즉시할인", 30, "정률할인", 10, "", 5000, "", "123, 456, 789"])
+        ws.append(["쿠폰1", "즉시할인쿠폰", 30, "정률할인", 10, "", 5000, "", "123, 456, 789"])
         wb.save(excel_file)
 
         coupons = fetch_coupons_from_excel(excel_file)
@@ -192,7 +192,7 @@ class TestFetchCouponsFromExcel:
         ws = wb.active
         assert ws is not None
         ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "즉시할인", 30, "정률할인", 10, "", 5000, "", "123"])
+        ws.append(["쿠폰1", "즉시할인쿠폰", 30, "정률할인", 10, "", 5000, "", "123"])
         ws.append([None, None, None, None, None, None, None, None, None])  # Empty row
         ws.append(["쿠폰2", "다운로드쿠폰", 15, "정액할인", 100, 10000, 100, 50, "456"])
         wb.save(excel_file)
@@ -211,7 +211,20 @@ class TestFetchCouponsFromExcel:
         wb.save(excel_file)
 
         coupons = fetch_coupons_from_excel(excel_file)
-        assert coupons[0]['type'] == "즉시할인"
+        assert coupons[0]['type'] == "즉시할인쿠폰"
+
+    def test_backward_compatibility_instant_coupon(self, tmp_path):
+        """Backward compatibility: '즉시할인' input should be normalized to '즉시할인쿠폰'"""
+        excel_file = tmp_path / "coupons.xlsx"
+        wb = Workbook()
+        ws = wb.active
+        assert ws is not None
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["쿠폰1", "즉시할인", 30, "정률할인", 10, "", 5000, "", "123"])  # Old format
+        wb.save(excel_file)
+
+        coupons = fetch_coupons_from_excel(excel_file)
+        assert coupons[0]['type'] == "즉시할인쿠폰"  # Normalized to new format
 
     def test_input_normalization_numbers(self, tmp_path):
         """Numbers with text should be extracted"""
@@ -220,7 +233,7 @@ class TestFetchCouponsFromExcel:
         ws = wb.active
         assert ws is not None
         ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
-        ws.append(["쿠폰1", "즉시할인", "30일", "정률할인", "10%", "", 5000, "", "123"])
+        ws.append(["쿠폰1", "즉시할인쿠폰", "30일", "정률할인", "10%", "", 5000, "", "123"])
         wb.save(excel_file)
 
         coupons = fetch_coupons_from_excel(excel_file)
@@ -234,7 +247,7 @@ class TestFetchCouponsFromExcel:
         ws = wb.active
         assert ws is not None
         ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션 ID"])
-        ws.append(["쿠폰1", "즉시할인", 30, "정률할인", 10, "", 5000, "", "123"])
+        ws.append(["쿠폰1", "즉시할인쿠폰", 30, "정률할인", 10, "", 5000, "", "123"])
         wb.save(excel_file)
 
         coupons = fetch_coupons_from_excel(excel_file)

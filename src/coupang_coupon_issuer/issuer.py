@@ -173,7 +173,7 @@ class CouponIssuer:
             coupon: 쿠폰 정의 딕셔너리
                 {
                     'name': '쿠폰이름',
-                    'type': '즉시할인' or '다운로드쿠폰',
+                    'type': '즉시할인쿠폰' or '다운로드쿠폰',
                     'validity_days': 2,  (유효기간 일수)
                     'discount_type': 'RATE' or 'FIXED_WITH_QUANTITY' or 'PRICE',
                     'discount': 10,  (할인금액/비율, Column E)
@@ -215,8 +215,8 @@ class CouponIssuer:
 
         try:
             # 쿠폰 타입별로 시작일 설정
-            if coupon_type == '즉시할인':
-                # 즉시할인: 오늘 0시 (KST 기준)
+            if coupon_type == '즉시할인쿠폰':
+                # 즉시할인쿠폰: 오늘 0시 (KST 기준)
                 now = datetime.now(KST)
                 today = now.replace(hour=0, minute=0, second=0, microsecond=0)
                 start_date = today.strftime('%Y-%m-%d %H:%M:%S')
@@ -233,7 +233,7 @@ class CouponIssuer:
                 # 알 수 없는 쿠폰 타입 (여기 도달하면 안 됨)
                 raise ValueError(f"알 수 없는 쿠폰 타입: {coupon_type}")
 
-            if coupon_type == '즉시할인':
+            if coupon_type == '즉시할인쿠폰':
                 result['message'] = self._issue_instant_coupon(
                     coupon_name=coupon_name,
                     discount_type=discount_type,
