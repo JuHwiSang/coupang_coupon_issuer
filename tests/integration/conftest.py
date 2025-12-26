@@ -125,10 +125,17 @@ def mock_coupang_api():
                 'couponId': 'DOWNLOAD_COUPON_11111'
             }
             
-            # Step 2: apply_download_coupon returns SUCCESS
-            mock_instance.apply_download_coupon.return_value = {
-                'requestResultStatus': 'SUCCESS'
-            }
+            # Step 2: apply_download_coupon returns SUCCESS (배열 형식)
+            mock_instance.apply_download_coupon.return_value = [{
+                'requestResultStatus': 'SUCCESS',
+                'body': {
+                    'couponId': 'DOWNLOAD_COUPON_11111',
+                    'requestTransactionId': 'usersomeid_test123456789'
+                },
+                'errorCode': None,
+                'errorMessage': None
+            }]
+
             
             # Mock contract list API (for _fetch_contract_id)
             mock_instance.get_contract_list.return_value = {

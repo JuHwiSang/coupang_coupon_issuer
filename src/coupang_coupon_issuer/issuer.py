@@ -412,12 +412,19 @@ class CouponIssuer:
             vendor_items=vendor_items
         )
 
-        result_status = response2.get('requestResultStatus')
+        # API 응답은 배열 형식 (공식 문서 오류 - 실제로는 list 반환)
+        # 예: [{"requestResultStatus":"SUCCESS","body":{"couponId":88385733,...},...}]
+        if not isinstance(response2, list) or len(response2) == 0:
+            raise AssertionError(f"다운로드쿠폰 아이템 적용 실패: 예상치 못한 응답 형식 {response2}")
+
+        result = response2[0]
+        result_status = result.get('requestResultStatus')
         if result_status != 'SUCCESS':
-            error_msg = response2.get('errorMessage', 'Unknown error')
+            error_msg = result.get('errorMessage', 'Unknown error')
             raise AssertionError(f"다운로드쿠폰 아이템 적용 실패: {error_msg}")
 
         return f"다운로드쿠폰 생성 완료 (couponId: {coupon_id}, 옵션 {len(vendor_items)}개 적용)"
+
 
     def _fetch_coupons_from_excel(self) -> List[Dict[str, Any]]:
         """엑셀 파일에서 쿠폰 정의 읽기 (reader 모듈 사용)"""

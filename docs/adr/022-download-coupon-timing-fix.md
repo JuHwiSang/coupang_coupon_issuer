@@ -195,7 +195,7 @@ API 문서에 명시된 "최소 1시간" 정확히 사용하거나, 최소한의
   "couponType": "DOWNLOAD",
   "startDate": "2025-12-26 00:00:00",  // ❌ 과거 시각
   "endDate": "2025-12-27 00:00:00",
-  "userId": "14maker",
+  "userId": "usersomeid",
   "policies": [{
     "minimumPrice": 1,  // ❌ 10원 단위 위반
     "discount": 1000
@@ -213,7 +213,7 @@ API 문서에 명시된 "최소 1시간" 정확히 사용하거나, 최소한의
   "couponType": "DOWNLOAD",
   "startDate": "2025-12-26 17:38:21",  // ✅ 현재시각(16:38:21 KST) + 1시간
   "endDate": "2025-12-27 23:59:00",     // ✅ 내일 23:59 (유효기간 1일)
-  "userId": "14maker",
+  "userId": "usersomeid",
   "policies": [{
     "minimumPrice": 10,  // ✅ 10원 단위
     "discount": 1000

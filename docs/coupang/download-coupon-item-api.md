@@ -56,16 +56,42 @@ https://api-gateway.coupang.com/v2/providers/marketplace_openapi/apis/api/v1/cou
 
 ## Response Message
 
+> [!CAUTION]
+> **공식 문서 오류 발견 (2025-12-26)**
+> 
+> Coupang 공식 API 문서에는 응답이 단일 객체로 표기되어 있으나, **실제로는 배열(Array)로 반환됩니다.**
+> 
+> 이 문서는 실제 API 동작에 맞춰 수정되었습니다.
+
+**응답 형식**: Array (배열)
+
+각 배열 요소는 다음 필드를 포함합니다:
+
 | Name | Type | Description |
 |------|------|-------------|
 | `requestResultStatus` | String | 호출 결과<br/>`SUCCESS` / `FAIL` |
-| `body` | Object | - |
+| `body` | Object | 응답 본문 |
 | `body.couponId` | Integer | 해당 쿠폰 ID |
+| `body.requestTransactionId` | String | 요청 트랜잭션 ID |
 | `errorCode` | String | 에러발생 시 분류 |
 | `errorMessage` | String | 에러 상세내용 |
 
 ## Response Example
 
+**실제 응답 (배열 형식)**:
+```json
+[{
+  "requestResultStatus": "SUCCESS",
+  "body": {
+    "couponId": 88385733,
+    "requestTransactionId": "usersomeid_883857331766744556994"
+  },
+  "errorCode": null,
+  "errorMessage": null
+}]
+```
+
+**공식 문서 예시 (잘못됨)**:
 ```json
 {
   "requestResultStatus": "SUCCESS",
@@ -76,6 +102,10 @@ https://api-gateway.coupang.com/v2/providers/marketplace_openapi/apis/api/v1/cou
   "errorMessage": null
 }
 ```
+
+> [!WARNING]
+> **중요**: 응답 처리 시 반드시 배열의 첫 번째 요소(`response[0]`)에서 데이터를 추출해야 합니다.
+
 
 ## Error Spec
 

@@ -43,6 +43,25 @@
 - [ADR 018: 할인방식 한글 입력 지원](docs/adr/018-korean-discount-type-names.md) - 정률할인/수량별 정액할인/정액할인 한글 입력
 - [ADR 019: setup/install 명령어 분리](docs/adr/019-setup-install-separation.md) - **현재 구조**, 시스템/사용자 레벨 작업 분리, 파일 권한 정상화
 - [ADR 020: 즉시할인쿠폰 REQUESTED 상태 간단 폴링](docs/adr/020-instant-coupon-simple-polling.md) - **덕테이프 솔루션**, 5회 × 2초 폴링, 향후 async 리팩토링 필요
+- [ADR 021: Excel 9컬럼 구조](docs/adr/021-excel-9-column-structure.md) - **현재 구조**, 최소구매금액/최대할인금액 Excel 설정
+- [ADR 022: 다운로드쿠폰 타이밍 수정](docs/adr/022-download-coupon-timing-fix.md) - KST timezone, 시작일/종료일 계산 로직
+
+## ⚠️ 중요: Coupang API 공식 문서 오류
+
+**다운로드쿠폰 아이템 적용 API 응답 형식이 공식 문서와 다릅니다!**
+
+- **API**: `PUT /v2/providers/marketplace_openapi/apis/api/v1/coupon-items`
+- **공식 문서**: 단일 객체 `{...}` (잘못됨)
+- **실제 응답**: 배열 `[{...}]` (올바름)
+
+**반드시 배열의 첫 번째 요소에서 데이터를 추출해야 합니다:**
+```python
+response = api_client.apply_download_coupon(...)
+result = response[0]  # 배열의 첫 번째 요소
+status = result.get('requestResultStatus')
+```
+
+**자세한 내용**: [download-coupon-item-api.md](docs/coupang/download-coupon-item-api.md), [DEV_LOG.md](docs/DEV_LOG.md) (2025-12-26 저녁)
 
 ## 계약 타입 (Contract Types)
 

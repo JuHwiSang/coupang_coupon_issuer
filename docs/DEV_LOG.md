@@ -4,7 +4,74 @@
 
 ---
 
+## 2025-12-26 (저녁 - 다운로드쿠폰 아이템 API 응답 형식 수정)
+
+### ⚠️ Coupang API 공식 문서 오류 발견
+
+**문제**: 다운로드쿠폰 아이템 적용 API (`PUT /v2/providers/marketplace_openapi/apis/api/v1/coupon-items`)의 공식 문서와 실제 응답 형식이 다름
+
+**공식 문서 (잘못됨)**:
+```json
+{
+  "requestResultStatus": "SUCCESS",
+  "body": {
+    "couponId": 15350660
+  },
+  "errorCode": null,
+  "errorMessage": null
+}
+```
+
+**실제 응답 (올바름)**:
+```json
+[{
+  "requestResultStatus": "SUCCESS",
+  "body": {
+    "couponId": 88385733,
+    "requestTransactionId": "someid_883857331766744556994"
+  },
+  "errorCode": null,
+  "errorMessage": null
+}]
+```
+
+**주요 차이점**:
+1. **응답이 배열(Array)로 반환됨** - 단일 객체가 아님
+2. `body.requestTransactionId` 필드가 추가로 포함됨
+
+**수정 내용**:
+
+1. **API 문서 수정** (`docs/coupang/download-coupon-item-api.md`):
+   - Response Message 테이블에 배열 형식 명시
+   - `body.requestTransactionId` 필드 추가
+   - 실제 응답 예시와 공식 문서 예시 모두 표시
+   - CAUTION/WARNING 알림 추가
+
+2. **구현 코드 수정** (`issuer.py:408-420`):
+   ```python
+   # Before
+   result_status = response2.get('requestResultStatus')
+   
+   # After
+   if not isinstance(response2, list) or len(response2) == 0:
+       raise AssertionError(f"다운로드쿠폰 아이템 적용 실패: 예상치 못한 응답 형식 {response2}")
+   
+   result = response2[0]
+   result_status = result.get('requestResultStatus')
+   ```
+
+3. **테스트 수정**:
+   - `tests/integration/conftest.py`: mock 반환값을 배열 형식으로 변경
+   - 모든 다운로드쿠폰 관련 테스트 업데이트
+
+**중요도**: ⚠️ **매우 높음** - 실제 API 호출 시 오류 발생 가능
+
+**참조**: [download-coupon-item-api.md](coupang/download-coupon-item-api.md)
+
+---
+
 ## 2025-12-26 (오후 - HTTP 상태 코드 처리 수정)
+
 
 ### HTTP 상태 코드 검증 로직 개선 (`coupang_api.py`)
 
