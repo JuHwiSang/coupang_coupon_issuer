@@ -4,6 +4,64 @@
 
 ---
 
+## 2025-12-26 (오후 - HTTP 상태 코드 처리 수정)
+
+### HTTP 상태 코드 검증 로직 개선 (`coupang_api.py`)
+
+**문제**: 기존 코드가 HTTP 200만 성공으로 처리하여 201, 302 등 정상 응답도 에러로 처리됨
+
+**기존 로직**:
+```python
+# HTTP 오류 체크
+response.raise_for_status()  # 2xx가 아니면 모두 예외 발생
+
+# API 응답 코드 체크
+if result.get('code') != 200:  # 200만 허용
+    raise ValueError(...)
+```
+
+**문제점**:
+- `raise_for_status()`는 2xx가 아닌 모든 코드(3xx, 4xx, 5xx)에서 예외 발생
+- 201 Created, 302 Redirect 등 정상 응답도 에러로 처리
+- 실제로는 4xx, 5xx만 에러로 처리해야 함
+
+**수정 로직** (`coupang_api.py:135-154`):
+```python
+# HTTP 오류 체크: 4xx, 5xx만 에러로 처리
+if response.status_code >= 400:
+    error_msg = f"HTTP {response.status_code} {response.reason}"
+    try:
+        error_data = response.json()
+        if 'errorMessage' in error_data:
+            error_msg += f": {error_data['errorMessage']}"
+        elif 'message' in error_data:
+            error_msg += f": {error_data['message']}"
+    except Exception:
+        pass  # JSON 파싱 실패 시 기본 메시지 사용
+    raise ValueError(error_msg)
+
+result = response.json()
+
+# API 응답 코드 체크 (JSON body의 code 필드)
+if 'code' in result and result['code'] >= 400:
+    error_msg = result.get('errorMessage') or result.get('message', 'Unknown error')
+    raise ValueError(f"API Error (code {result['code']}): {error_msg}")
+```
+
+**변경사항**:
+1. **HTTP 상태 코드**: `>= 400`만 에러로 처리 (2xx, 3xx는 성공)
+2. **JSON body code 필드**: `>= 400`만 에러로 처리 (200, 201 등 모두 성공)
+3. **에러 메시지 개선**: HTTP 상태와 JSON 에러 메시지 모두 포함
+
+**효과**:
+- ✅ 200 OK → 성공
+- ✅ 201 Created → 성공
+- ✅ 302 Found → 성공
+- ❌ 400 Bad Request → 에러
+- ❌ 500 Internal Server Error → 에러
+
+---
+
 ## 2025-12-26 (오후)
 
 ### 다운로드쿠폰 API 에러 수정 (ADR 022)

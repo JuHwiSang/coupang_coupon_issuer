@@ -118,8 +118,10 @@ class TestAPIRequest:
             json={"error": "Bad Request"}
         )
 
-        with pytest.raises(requests.HTTPError):
+        with pytest.raises(ValueError) as exc_info:
             client._request("POST", "/v2/test/path")
+        
+        assert "HTTP 400" in str(exc_info.value)
 
     def test_request_api_error_code(self, requests_mock):
         """Mock HTTP 200 but API code != 200 (API-level error)"""
@@ -471,8 +473,10 @@ class TestContractList:
             json={"error": "Unauthorized"}
         )
 
-        with pytest.raises(requests.HTTPError):
+        with pytest.raises(ValueError) as exc_info:
             client.get_contract_list(vendor_id)
+        
+        assert "HTTP 401" in str(exc_info.value)
 
     def test_get_contract_list_api_error(self, requests_mock):
         """Mock API-level error (HTTP 200 but code != 200)"""

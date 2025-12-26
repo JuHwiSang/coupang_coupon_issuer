@@ -132,15 +132,25 @@ class CoupangAPIClient:
             print(response.text, flush=True)
             print(f"{'='*80}\n", flush=True)
 
-            # HTTP 오류 체크
-            response.raise_for_status()
+            # HTTP 오류 체크: 4xx, 5xx만 에러로 처리
+            if response.status_code >= 400:
+                error_msg = f"HTTP {response.status_code} {response.reason}"
+                try:
+                    error_data = response.json()
+                    if 'errorMessage' in error_data:
+                        error_msg += f": {error_data['errorMessage']}"
+                    elif 'message' in error_data:
+                        error_msg += f": {error_data['message']}"
+                except Exception:
+                    pass  # JSON 파싱 실패 시 기본 메시지 사용
+                raise ValueError(error_msg)
 
             result = response.json()
 
-            # API 응답 코드 체크
-            if result.get('code') != 200:
+            # API 응답 코드 체크 (JSON body의 code 필드)
+            if 'code' in result and result['code'] >= 400:
                 error_msg = result.get('errorMessage') or result.get('message', 'Unknown error')
-                raise ValueError(f"API Error (code {result.get('code')}): {error_msg}")
+                raise ValueError(f"API Error (code {result['code']}): {error_msg}")
 
             print(f"[{timestamp}] API 응답: 성공 (HTTP {response.status_code})", flush=True)
             return result
