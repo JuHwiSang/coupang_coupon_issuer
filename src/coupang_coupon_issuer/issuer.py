@@ -212,11 +212,12 @@ class CouponIssuer:
                 # 유효 종료일: 오늘 0시 + validity_days일
                 end_date = (today + timedelta(days=validity_days)).strftime('%Y-%m-%d %H:%M:%S')
             elif coupon_type == '다운로드쿠폰':
-                # 다운로드쿠폰: 현재시각 + 10초 (API 처리 시간 고려)
+                # 다운로드쿠폰: 현재시각 + 1시간 10분 (API 처리 시간 + 안정성 마진)
                 now = datetime.now()
-                start_date = (now + timedelta(seconds=10)).strftime('%Y-%m-%d %H:%M:%S')
-                # 유효 종료일: 현재시각 + validity_days일
-                end_date = (now + timedelta(days=validity_days)).strftime('%Y-%m-%d %H:%M:%S')
+                start_date = (now + timedelta(hours=1, minutes=10)).strftime('%Y-%m-%d %H:%M:%S')
+                # 유효 종료일: 오늘 자정 + validity_days일 (그날 자정에 만료)
+                today_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                end_date = (today_midnight + timedelta(days=validity_days)).strftime('%Y-%m-%d %H:%M:%S')
             else:
                 # 알 수 없는 쿠폰 타입 (여기 도달하면 안 됨)
                 raise ValueError(f"알 수 없는 쿠폰 타입: {coupon_type}")
