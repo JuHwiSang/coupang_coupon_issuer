@@ -1097,6 +1097,13 @@ uv run python main.py verify examples/
 - 참조: ADR 020
 - 검색 키워드: TODO, async, polling, REQUESTED
 
+**TODO: 옵션ID 개수 검증 로직 추가**
+- 문제: 옵션ID의 개수는 100개를 초과할 수 없음 (Coupang API 제약)
+- 현재: 개수 검증 없음 (10,000개 제한만 존재)
+- 필요: `reader.py`에 옵션ID 개수 검증 로직 추가 (최대 100개)
+- 검증 위치: `fetch_coupons_from_excel()` 함수 내 옵션ID 파싱 후
+- 검색 키워드: TODO, option ID, count, validation
+
 ---
 
 ### 다운로드쿠폰 minimumPrice 필드 추가 (2025-12-26)
