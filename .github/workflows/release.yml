@@ -6,8 +6,11 @@ on:
       - 'v*'
 
 jobs:
-  build:
+  release:
     runs-on: ubuntu-22.04
+
+    permissions:
+      contents: write
     
     steps:
     - name: Checkout code
