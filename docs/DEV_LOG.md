@@ -4,6 +4,22 @@
 
 ---
 
+## 2025-12-27 (GitHub Actions 빌드 플랫폼)
+
+### PyInstaller 빌드 환경: ubuntu-22.04
+
+**변경 사항**: `.github/workflows/build.yml`의 `runs-on`을 `ubuntu-latest`에서 `ubuntu-22.04`로 변경
+
+**이유**:
+- PyInstaller 바이너리는 빌드 환경의 glibc 버전에 링크됨
+- `ubuntu-latest` (24.04)에서 빌드 시 Ubuntu 22.04에서 호환성 문제 발생 가능
+- Ubuntu 22.04는 프로젝트의 최소 요구사항 (Python 3.10, Ubuntu 22.04)과 일치
+- 타겟 환경(Ubuntu 22.04/Debian 12 이상)에서 안정적 동작 보장
+
+**참고**: ubuntu-22.04는 Debian 12 (Bookworm)보다도 오래된 안정 버전
+
+---
+
 ## 2025-12-26 (저녁 - 쿠폰 타입 명칭 일관성 수정)
 
 ### 쿠폰 타입 "즉시할인" → "즉시할인쿠폰" 통일

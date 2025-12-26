@@ -128,7 +128,9 @@ status = result.get('requestResultStatus')
 ### CI/CD 환경
 - **GitHub Actions**: 자동 빌드 워크플로우
 - **빌드 도구**: uv + PyInstaller
-- **타겟 플랫폼**: Linux (ubuntu-latest)
+- **타겟 플랫폼**: Linux (ubuntu-22.04)
+  - 프로젝트 최소 요구사항 (Ubuntu 22.04, Python 3.10)과 일치
+  - PyInstaller 바이너리 호환성 보장 (glibc 버전 호환)
 - **Artifact**: `coupang_coupon_issuer` 바이너리 (30일 보관)
 - **실행 모드 감지**: `is_pyinstaller()` 유틸리티로 자동 감지
 
