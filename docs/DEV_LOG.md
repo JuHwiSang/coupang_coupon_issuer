@@ -32,6 +32,36 @@
 
 ---
 
+## 2025-12-26 (오후 - Timezone 수정)
+
+### Timezone 및 종료시각 수정 (ADR 022 업데이트)
+
+**문제**: 
+1. Coupang API는 UTC+9 (한국 시간) 기준이지만 코드는 timezone 미명시
+2. endDate가 00:00:00으로 설정되어 유효기간 마지막 날 자정에 만료됨
+3. 다운로드쿠폰 시작일 +1시간 10분 오프셋이 과도함
+
+**해결**:
+1. **Timezone 명시** (`issuer.py:7-15`):
+   - `from zoneinfo import ZoneInfo` 추가
+   - `KST = ZoneInfo("Asia/Seoul")` 상수 정의
+   - Windows 호환성: ZoneInfo 실패 시 `timezone(timedelta(hours=9))` fallback
+   - 모든 `datetime.now()` → `datetime.now(KST)` 변경
+
+2. **다운로드쿠폰 시작일** (`issuer.py:218-220`):
+   - 기존: `현재시각 + 1시간 10분`
+   - 변경: `현재시각 + 1시간` (KST 기준)
+   - 근거: API 처리 시간 확보, 10분 추가 마진 제거
+
+3. **종료일 계산** (`issuer.py:210-224`):
+   - 기존: `자정 + N일` (00:00:00)
+   - 변경: `자정 + N일 - 1분` (23:59:00)
+   - 근거: 유효기간 N일은 N일째 23:59까지 유효해야 함
+
+**참조**: [ADR 022](adr/022-download-coupon-timing-fix.md) 변경 이력 추가
+
+---
+
 ## 2025-12-26
 
 ### Excel 구조 확장: 7컬럼 → 9컬럼 (ADR 021)

@@ -5,6 +5,16 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
+# Korea Standard Time (UTC+9)
+# Windows에서는 tzdata 패키지 필요
+try:
+    from zoneinfo import ZoneInfo
+    KST = ZoneInfo("Asia/Seoul")
+except Exception:
+    # Fallback: UTC+9 offset 사용
+    from datetime import timezone
+    KST = timezone(timedelta(hours=9))
+
 from .coupang_api import CoupangAPIClient
 from .config import (
     get_base_dir,
@@ -206,18 +216,19 @@ class CouponIssuer:
         try:
             # 쿠폰 타입별로 시작일 설정
             if coupon_type == '즉시할인':
-                # 즉시할인: 오늘 0시 (기존 로직 유지)
-                today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+                # 즉시할인: 오늘 0시 (KST 기준)
+                now = datetime.now(KST)
+                today = now.replace(hour=0, minute=0, second=0, microsecond=0)
                 start_date = today.strftime('%Y-%m-%d %H:%M:%S')
-                # 유효 종료일: 오늘 0시 + validity_days일
-                end_date = (today + timedelta(days=validity_days)).strftime('%Y-%m-%d %H:%M:%S')
+                # 유효 종료일: 오늘 0시 + validity_days일 - 1분 (그날 23:59에 만료)
+                end_date = (today + timedelta(days=validity_days) - timedelta(minutes=1)).strftime('%Y-%m-%d %H:%M:%S')
             elif coupon_type == '다운로드쿠폰':
-                # 다운로드쿠폰: 현재시각 + 1시간 10분 (API 처리 시간 + 안정성 마진)
-                now = datetime.now()
-                start_date = (now + timedelta(hours=1, minutes=10)).strftime('%Y-%m-%d %H:%M:%S')
-                # 유효 종료일: 오늘 자정 + validity_days일 (그날 자정에 만료)
+                # 다운로드쿠폰: 현재시각 + 1시간 (KST 기준, API 처리 시간 확보)
+                now = datetime.now(KST)
+                start_date = (now + timedelta(hours=1)).strftime('%Y-%m-%d %H:%M:%S')
+                # 유효 종료일: 오늘 자정 + validity_days일 - 1분 (그날 23:59에 만료)
                 today_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
-                end_date = (today_midnight + timedelta(days=validity_days)).strftime('%Y-%m-%d %H:%M:%S')
+                end_date = (today_midnight + timedelta(days=validity_days) - timedelta(minutes=1)).strftime('%Y-%m-%d %H:%M:%S')
             else:
                 # 알 수 없는 쿠폰 타입 (여기 도달하면 안 됨)
                 raise ValueError(f"알 수 없는 쿠폰 타입: {coupon_type}")

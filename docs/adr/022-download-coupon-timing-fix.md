@@ -58,35 +58,44 @@ min_purchase_price = 1  # 기본값
 
 ### 1. 다운로드쿠폰 시작일/종료일 계산
 
-**변경 위치**: `issuer.py:206-224` (`_issue_single_coupon` 메서드)
+**변경 위치**: `issuer.py:210-224` (`_issue_single_coupon` 메서드)
 
 **변경 후**:
 ```python
+# Korea Standard Time (UTC+9)
+from zoneinfo import ZoneInfo
+KST = ZoneInfo("Asia/Seoul")
+
 # 쿠폰 타입별로 시작일 설정
 if coupon_type == '즉시할인':
-    # 즉시할인: 오늘 0시 (기존 로직 유지)
-    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    # 즉시할인: 오늘 0시 (KST 기준)
+    now = datetime.now(KST)
+    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
     start_date = today.strftime('%Y-%m-%d %H:%M:%S')
-    end_date = (today + timedelta(days=validity_days)).strftime('%Y-%m-%d %H:%M:%S')
+    # 유효 종료일: 오늘 0시 + validity_days일 - 1분 (그날 23:59에 만료)
+    end_date = (today + timedelta(days=validity_days) - timedelta(minutes=1)).strftime('%Y-%m-%d %H:%M:%S')
 elif coupon_type == '다운로드쿠폰':
-    # 다운로드쿠폰: 현재시각 + 1시간 10분 (API 처리 시간 + 안정성 마진)
-    now = datetime.now()
-    start_date = (now + timedelta(hours=1, minutes=10)).strftime('%Y-%m-%d %H:%M:%S')
-    # 유효 종료일: 오늘 자정 + validity_days일 (그날 자정에 만료)
+    # 다운로드쿠폰: 현재시각 + 1시간 (KST 기준, API 처리 시간 확보)
+    now = datetime.now(KST)
+    start_date = (now + timedelta(hours=1)).strftime('%Y-%m-%d %H:%M:%S')
+    # 유효 종료일: 오늘 자정 + validity_days일 - 1분 (그날 23:59에 만료)
     today_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    end_date = (today_midnight + timedelta(days=validity_days)).strftime('%Y-%m-%d %H:%M:%S')
+    end_date = (today_midnight + timedelta(days=validity_days) - timedelta(minutes=1)).strftime('%Y-%m-%d %H:%M:%S')
 ```
 
 **근거**:
-- **시작일 (+1시간 10분)**:
-  - 초기 시도 (+10초)로는 API 에러 발생 확인
+- **Timezone 명시 (KST)**:
+  - Coupang API는 한국 시간(UTC+9) 기준으로 동작
+  - 기존 코드는 timezone 미명시로 "과거 시각" 에러 발생 가능
+  - `datetime.now(KST)` 사용으로 명시적 timezone 처리
+- **시작일 (+1시간)**:
   - 다운로드쿠폰 API 문서: "생성 후 최소 1시간 이후부터 프론트에 반영" (`download-coupon-api.md:16-17`)
-  - 1시간 10분으로 충분한 여유 확보
-  - 즉시할인쿠폰은 기존 로직 유지 (정상 작동 중)
-- **종료일 (자정 기준)**:
-  - 원래 스펙: 유효기간 N일 = 오늘 자정부터 N일 후 자정까지
-  - 기존 구현 오류: 현재시각 기준으로 계산되어 스펙 위반
-  - 수정: 자정 기준으로 계산하여 원래 스펙대로 복원
+  - 기존 1시간 10분에서 10분 마진 제거 (1시간이면 충분)
+  - 즉시할인쿠폰은 오늘 0시 유지 (정상 작동 중)
+- **종료일 (23:59:00)**:
+  - 유효기간 N일 = N일째 날이 끝날 때까지 유효해야 함
+  - 기존: 00:00:00 (다음 날 시작) → 수정: 23:59:00 (당일 종료)
+  - 사용자 기대와 일치 (N일째 23:59까지 사용 가능)
 
 ### 2. 최소구매금액 기본값: 10원
 
@@ -111,8 +120,9 @@ else:
 
 | 항목 | 즉시할인쿠폰 | 다운로드쿠폰 |
 |------|-------------|-------------|
-| 시작일 | 오늘 0시 (정상 작동) | 현재시각 + 1시간 10분 (수정) |
-| 종료일 | 오늘 0시 + N일 | 오늘 자정 + N일 (수정) |
+| Timezone | KST (UTC+9) | KST (UTC+9) |
+| 시작일 | 오늘 0시 | 현재시각 + 1시간 |
+| 종료일 | 오늘 0시 + N일 - 1분 (23:59) | 오늘 자정 + N일 - 1분 (23:59) |
 | 최소구매금액 | 사용 안함 | 10원 기본값 (수정) |
 | API 타입 | 비동기 | 동기 |
 
@@ -201,8 +211,8 @@ API 문서에 명시된 "최소 1시간" 정확히 사용하거나, 최소한의
   "title": "다운로드쿠폰1",
   "contractId": 162749,
   "couponType": "DOWNLOAD",
-  "startDate": "2025-12-26 16:35:24",  // ✅ 현재시각(15:25) + 1시간 10분
-  "endDate": "2025-12-27 00:00:00",     // ✅ 내일 자정 (유효기간 1일)
+  "startDate": "2025-12-26 17:38:21",  // ✅ 현재시각(16:38:21 KST) + 1시간
+  "endDate": "2025-12-27 23:59:00",     // ✅ 내일 23:59 (유효기간 1일)
   "userId": "14maker",
   "policies": [{
     "minimumPrice": 10,  // ✅ 10원 단위
@@ -219,6 +229,27 @@ API 문서에 명시된 "최소 1시간" 정확히 사용하거나, 최소한의
 - [DEV_LOG.md](../DEV_LOG.md) - 변경사항 기록
 
 ## 변경 이력
+
+### 2025-12-26 16:38 - Timezone 및 종료시각 수정
+
+**변경 사항**:
+1. **Timezone 명시**: UTC+0 → UTC+9 (KST)
+   - 이유: Coupang API는 한국 시간(UTC+9) 기준으로 동작
+   - 기존 코드는 timezone을 명시하지 않아 "과거 시각" 에러 발생 가능
+   - `datetime.now()` → `datetime.now(ZoneInfo("Asia/Seoul"))`
+
+2. **다운로드쿠폰 시작일**: `현재시각 + 1시간 10분` → `현재시각 + 1시간`
+   - 이유: API 처리 시간 확보 (1시간이면 충분)
+   - 10분 추가 마진 제거로 대기 시간 단축
+
+3. **종료일**: `자정 (00:00:00)` → `자정 - 1분 (23:59:00)`
+   - 이유: 유효기간 N일은 N일째 날이 끝날 때까지 유효해야 함
+   - 00:00:00은 다음 날 시작이므로 23:59:00으로 수정
+   - 사용자 기대와 일치 (N일째 23:59까지 사용 가능)
+
+**근거**: API 테스트 결과 및 한국 시간대 명시적 처리 필요성
+
+---
 
 ### 2025-12-26 15:25 - 시작일/종료일 계산 로직 수정
 
