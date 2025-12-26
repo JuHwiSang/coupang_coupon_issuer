@@ -141,7 +141,7 @@ def fetch_coupons_from_excel(excel_path: Path) -> List[Dict[str, Any]]:
                     if min_purchase_price < 1:
                         raise ValueError(f"행 {row_idx}: 최소구매금액은 1원 이상이어야 합니다 (현재: {min_purchase_price})")
                 else:
-                    min_purchase_price = 1  # 기본값
+                    min_purchase_price = 10  # 기본값 (API 최소값: 10원)
             elif coupon_type == '즉시할인':
                 # 즉시할인: 사용 안함
                 min_purchase_price = None

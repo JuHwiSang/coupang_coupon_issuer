@@ -204,12 +204,22 @@ class CouponIssuer:
         }
 
         try:
-            # 유효 시작일: 오늘 0시
-            today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-            start_date = today.strftime('%Y-%m-%d %H:%M:%S')
-
-            # 유효 종료일: 오늘 0시 + validity_days일
-            end_date = (today + timedelta(days=validity_days)).strftime('%Y-%m-%d %H:%M:%S')
+            # 쿠폰 타입별로 시작일 설정
+            if coupon_type == '즉시할인':
+                # 즉시할인: 오늘 0시 (기존 로직 유지)
+                today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+                start_date = today.strftime('%Y-%m-%d %H:%M:%S')
+                # 유효 종료일: 오늘 0시 + validity_days일
+                end_date = (today + timedelta(days=validity_days)).strftime('%Y-%m-%d %H:%M:%S')
+            elif coupon_type == '다운로드쿠폰':
+                # 다운로드쿠폰: 현재시각 + 10초 (API 처리 시간 고려)
+                now = datetime.now()
+                start_date = (now + timedelta(seconds=10)).strftime('%Y-%m-%d %H:%M:%S')
+                # 유효 종료일: 현재시각 + validity_days일
+                end_date = (now + timedelta(days=validity_days)).strftime('%Y-%m-%d %H:%M:%S')
+            else:
+                # 알 수 없는 쿠폰 타입 (여기 도달하면 안 됨)
+                raise ValueError(f"알 수 없는 쿠폰 타입: {coupon_type}")
 
             if coupon_type == '즉시할인':
                 result['message'] = self._issue_instant_coupon(
