@@ -56,6 +56,7 @@
 - [ADR 020: 즉시할인쿠폰 REQUESTED 상태 간단 폴링](docs/adr/020-instant-coupon-simple-polling.md) - **덕테이프 솔루션**, 5회 × 2초 폴링, 향후 async 리팩토링 필요
 - [ADR 021: Excel 9컬럼 구조](docs/adr/021-excel-9-column-structure.md) - **현재 구조**, 최소구매금액/최대할인금액 Excel 설정
 - [ADR 022: 다운로드쿠폰 타이밍 수정](docs/adr/022-download-coupon-timing-fix.md) - KST timezone, 시작일/종료일 계산 로직
+- [ADR 023: 다운로드쿠폰 파기 및 재발급](docs/adr/023-download-coupon-expiration.md) - **현재 구조**, JSON 기록, 파기 워크플로우, 하위 호환성
 
 ## ⚠️ 중요: Coupang API 공식 문서 오류
 
@@ -152,6 +153,7 @@ Python 3.10+ 요구사항으로 인해 다음 버전 이상에서만 동작합�
 ~/my-coupons/
 ├── config.json                  # API 키 + UUID (600 권한)
 ├── coupons.xlsx                 # 쿠폰 정의 (사용자 배치)
+├── download_coupons.json        # 다운로드쿠폰 ID 기록 (자동 생성)
 └── issuer.log                   # 실행 로그 (자동 생성)
 
 # 프로젝트 소스 (별도 위치, 예: /opt/coupang_coupon_issuer)
@@ -206,11 +208,17 @@ docs/
 │   ├── 015-option-id-column.md  # **현재 구조**
 │   ├── 016-test-layer-separation.md
 │   ├── 017-coupon-type-specific-validation.md
-│   └── 018-korean-discount-type-names.md
+│   ├── 018-korean-discount-type-names.md
+│   ├── 019-setup-install-separation.md
+│   ├── 020-instant-coupon-simple-polling.md
+│   ├── 021-excel-9-column-structure.md  # **현재 구조**
+│   ├── 022-download-coupon-timing-fix.md
+│   └── 023-download-coupon-expiration.md  # **현재 구조**
 └── coupang/                     # Coupang API 규격 문서
     ├── workflow.md
     ├── parameters-explained.md
     ├── contract-list-api.md     # 계약 목록 조회 API
+    ├── download-coupon-expire-api.md  # 다운로드쿠폰 파기 API
     └── (각종 API 문서)
 
 # 예시 파일 (9컬럼 구조)

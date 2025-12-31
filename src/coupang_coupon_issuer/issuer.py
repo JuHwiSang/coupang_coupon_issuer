@@ -1,6 +1,7 @@
 """쿠폰 발급 로직 모듈"""
 
 import time
+import json
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, List, Dict, Any
@@ -19,6 +20,7 @@ from .coupang_api import CoupangAPIClient
 from .config import (
     get_base_dir,
     get_excel_file,
+    get_download_coupons_file,
     COUPON_CONTRACT_ID,
     COUPON_DEFAULT_ISSUE_COUNT,
     POLLING_MAX_RETRIES,
@@ -51,6 +53,7 @@ class CouponIssuer:
         """
         self.base_dir = get_base_dir(base_dir)
         self.excel_file = get_excel_file(self.base_dir)
+        self.download_coupons_file = get_download_coupons_file(self.base_dir)
 
         # 모든 인증 정보 필수
         if not access_key or not secret_key:
@@ -142,8 +145,12 @@ class CouponIssuer:
                 print(f"[{timestamp}] 발급할 쿠폰이 없습니다", flush=True)
                 return
 
+            # 1.5. 이전 다운로드쿠폰 파기 (새로운 단계)
+            self._expire_previous_download_coupons()
+
             # 2. 각 쿠폰 발급 처리
             print(f"[{timestamp}] 쿠폰 발급 처리 중: 총 {len(coupons)}개", flush=True)
+
 
             for idx, coupon in enumerate(coupons, start=1):
                 result = self._issue_single_coupon(idx, coupon)
@@ -423,6 +430,13 @@ class CouponIssuer:
             error_msg = result.get('errorMessage', 'Unknown error')
             raise AssertionError(f"다운로드쿠폰 아이템 적용 실패: {error_msg}")
 
+        # 발급 성공 시 기록 저장
+        self._save_download_coupon_record({
+            "name": coupon_name,
+            "coupon_id": coupon_id,
+            "issued_at": self._timestamp()
+        })
+
         return f"다운로드쿠폰 생성 완료 (couponId: {coupon_id}, 옵션 {len(vendor_items)}개 적용)"
 
 
@@ -497,3 +511,126 @@ class CouponIssuer:
         
         # 이 코드에는 도달하지 않지만 타입 체커를 위해 추가
         raise AssertionError(f"{operation_name} 예상치 못한 종료")
+
+    def _load_download_coupon_records(self) -> List[Dict[str, Any]]:
+        """
+        다운로드쿠폰 기록 파일 읽기
+        
+        Returns:
+            쿠폰 기록 리스트 (파일 없으면 빈 리스트)
+        
+        Note:
+            하위 호환성: 파일 없으면 warning 출력하고 빈 리스트 반환
+        """
+        timestamp = self._timestamp()
+        
+        if not self.download_coupons_file.exists():
+            print(f"[{timestamp}] WARNING: 다운로드쿠폰 기록 파일이 없습니다: {self.download_coupons_file}", flush=True)
+            print(f"[{timestamp}] WARNING: 이전 쿠폰 파기를 건너뜁니다 (첫 실행 또는 업그레이드 후)", flush=True)
+            return []
+        
+        try:
+            with open(self.download_coupons_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                coupons = data.get('coupons', [])
+                print(f"[{timestamp}] 다운로드쿠폰 기록 로드 완료: {len(coupons)}개", flush=True)
+                return coupons
+        except json.JSONDecodeError as e:
+            print(f"[{timestamp}] ERROR: 다운로드쿠폰 기록 파일 파싱 실패: {e}", flush=True)
+            print(f"[{timestamp}] WARNING: 이전 쿠폰 파기를 건너뜁니다", flush=True)
+            return []
+        except Exception as e:
+            print(f"[{timestamp}] ERROR: 다운로드쿠폰 기록 파일 읽기 실패: {e}", flush=True)
+            print(f"[{timestamp}] WARNING: 이전 쿠폰 파기를 건너뜁니다", flush=True)
+            return []
+
+    def _save_download_coupon_records(self, records: List[Dict[str, Any]]) -> None:
+        """다운로드쿠폰 기록 파일 저장 (JSON 형식)"""
+        timestamp = self._timestamp()
+        
+        data = {
+            "last_updated": timestamp,
+            "coupons": records
+        }
+        
+        try:
+            with open(self.download_coupons_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            print(f"[{timestamp}] 다운로드쿠폰 기록 저장 완료: {len(records)}개", flush=True)
+        except Exception as e:
+            print(f"[{timestamp}] ERROR: 다운로드쿠폰 기록 저장 실패: {e}", flush=True)
+            raise
+
+    def _save_download_coupon_record(self, record: Dict[str, Any]) -> None:
+        """단일 다운로드쿠폰 기록 추가 (헬퍼 메서드)"""
+        # 기존 기록 로드
+        records = self._load_download_coupon_records()
+        
+        # 새 기록 추가
+        records.append(record)
+        
+        # 저장
+        self._save_download_coupon_records(records)
+
+    def _expire_previous_download_coupons(self) -> None:
+        """
+        이전에 발급된 다운로드쿠폰 전체 파기
+        
+        Note:
+            하위 호환성: 기록 파일 없으면 warning만 출력하고 스킵
+        """
+        timestamp = self._timestamp()
+        
+        # 기록 로드
+        records = self._load_download_coupon_records()
+        
+        if not records:
+            print(f"[{timestamp}] 파기할 이전 다운로드쿠폰이 없습니다", flush=True)
+            return
+        
+        print(f"[{timestamp}] 이전 다운로드쿠폰 파기 시작 (총 {len(records)}개)", flush=True)
+        
+        # 파기 요청 리스트 생성
+        expire_list = []
+        for record in records:
+            coupon_id = record.get('coupon_id')
+            if coupon_id:
+                expire_list.append({
+                    "couponId": coupon_id,
+                    "reason": "expired",
+                    "userId": self.user_id
+                })
+        
+        if not expire_list:
+            print(f"[{timestamp}] WARNING: 유효한 쿠폰 ID가 없습니다", flush=True)
+            return
+        
+        try:
+            # API 호출
+            response = self.api_client.expire_download_coupons(expire_list)
+            
+            # 결과 확인
+            success_count = 0
+            fail_count = 0
+            
+            for result in response:
+                status = result.get('requestResultStatus')
+                coupon_id = result.get('body', {}).get('couponId')
+                
+                if status == 'SUCCESS':
+                    success_count += 1
+                    print(f"[{timestamp}] 다운로드쿠폰 파기 완료: couponId={coupon_id}", flush=True)
+                else:
+                    fail_count += 1
+                    error_msg = result.get('errorMessage', 'Unknown error')
+                    print(f"[{timestamp}] WARNING: 다운로드쿠폰 파기 실패: couponId={coupon_id}, error={error_msg}", flush=True)
+            
+            print(f"[{timestamp}] 이전 다운로드쿠폰 파기 완료 (성공: {success_count}, 실패: {fail_count})", flush=True)
+            
+            # 기록 파일 초기화 (파기 완료 후)
+            self._save_download_coupon_records([])
+            
+        except Exception as e:
+            print(f"[{timestamp}] ERROR: 다운로드쿠폰 파기 중 오류 발생: {e}", flush=True)
+            print(f"[{timestamp}] WARNING: 이전 쿠폰 파기 실패, 계속 진행합니다", flush=True)
+            # 오류 발생 시에도 계속 진행 (하위 호환성)

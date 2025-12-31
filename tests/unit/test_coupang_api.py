@@ -498,3 +498,115 @@ class TestContractList:
 
         assert "API Error (code 401)" in str(exc_info.value)
         assert "업체정보의 권한을 확인하세요" in str(exc_info.value)
+
+
+@pytest.mark.unit
+class TestExpireDownloadCoupons:
+    """Test expire_download_coupons()"""
+
+    def test_expire_single_coupon_success(self, requests_mock):
+        """Mock successful single coupon expiration"""
+        client = CoupangAPIClient("test-access", "test-secret")
+
+        requests_mock.post(
+            "https://api-gateway.coupang.com/v2/providers/marketplace_openapi/apis/api/v1/coupons/expire",
+            status_code=200,
+            json=[
+                {
+                    "requestResultStatus": "SUCCESS",
+                    "body": {
+                        "couponId": 16513129,
+                        "requestTransactionId": "et5_165131291561017478962"
+                    },
+                    "errorCode": None,
+                    "errorMessage": None
+                }
+            ]
+        )
+
+        expire_list = [
+            {
+                "couponId": 16513129,
+                "reason": "expired",
+                "userId": "testId123"
+            }
+        ]
+
+        result = client.expire_download_coupons(expire_list)
+
+        # Verify response is a list
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert result[0]["requestResultStatus"] == "SUCCESS"
+        assert result[0]["body"]["couponId"] == 16513129
+        assert result[0]["body"]["requestTransactionId"] == "et5_165131291561017478962"
+
+        # Verify request payload
+        request_body = requests_mock.last_request.json()
+        assert "expireCouponList" in request_body
+        assert len(request_body["expireCouponList"]) == 1
+        assert request_body["expireCouponList"][0]["couponId"] == 16513129
+        assert request_body["expireCouponList"][0]["reason"] == "expired"
+        assert request_body["expireCouponList"][0]["userId"] == "testId123"
+
+    def test_expire_multiple_coupons_success(self, requests_mock):
+        """Mock successful multiple coupons expiration"""
+        client = CoupangAPIClient("test-access", "test-secret")
+
+        requests_mock.post(
+            "https://api-gateway.coupang.com/v2/providers/marketplace_openapi/apis/api/v1/coupons/expire",
+            status_code=200,
+            json=[
+                {
+                    "requestResultStatus": "SUCCESS",
+                    "body": {
+                        "couponId": 12345,
+                        "requestTransactionId": "tx1"
+                    },
+                    "errorCode": None,
+                    "errorMessage": None
+                },
+                {
+                    "requestResultStatus": "SUCCESS",
+                    "body": {
+                        "couponId": 67890,
+                        "requestTransactionId": "tx2"
+                    },
+                    "errorCode": None,
+                    "errorMessage": None
+                }
+            ]
+        )
+
+        expire_list = [
+            {"couponId": 12345, "reason": "expired", "userId": "user1"},
+            {"couponId": 67890, "reason": "expired", "userId": "user1"}
+        ]
+
+        result = client.expire_download_coupons(expire_list)
+
+        # Verify response
+        assert isinstance(result, list)
+        assert len(result) == 2
+        assert all(r["requestResultStatus"] == "SUCCESS" for r in result)
+        assert result[0]["body"]["couponId"] == 12345
+        assert result[1]["body"]["couponId"] == 67890
+
+    def test_expire_coupon_api_error(self, requests_mock):
+        """Mock API error response (coupon not found)"""
+        client = CoupangAPIClient("test-access", "test-secret")
+
+        requests_mock.post(
+            "https://api-gateway.coupang.com/v2/providers/marketplace_openapi/apis/api/v1/coupons/expire",
+            status_code=500,
+            json={"error": "expire할 쿠폰이 존재하지 않습니다."}
+        )
+
+        expire_list = [
+            {"couponId": 99999, "reason": "expired", "userId": "user1"}
+        ]
+
+        with pytest.raises(ValueError) as exc_info:
+            client.expire_download_coupons(expire_list)
+        
+        assert "HTTP 500" in str(exc_info.value)

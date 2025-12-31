@@ -14,6 +14,7 @@ from coupang_coupon_issuer.config import (
     get_config_file,
     get_excel_file,
     get_log_file,
+    get_download_coupons_file,
     COUPON_CONTRACT_ID,
 )
 
@@ -50,6 +51,11 @@ class TestPathFunctions:
         """get_log_file() should return base_dir / issuer.log"""
         result = get_log_file(tmp_path)
         assert result == tmp_path / "issuer.log"
+
+    def test_get_download_coupons_file(self, tmp_path):
+        """get_download_coupons_file() should return base_dir / download_coupons.json"""
+        result = get_download_coupons_file(tmp_path)
+        assert result == tmp_path / "download_coupons.json"
 
 
 @pytest.mark.unit

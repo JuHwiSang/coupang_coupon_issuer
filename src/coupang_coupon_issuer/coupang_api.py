@@ -364,3 +364,48 @@ class CoupangAPIClient:
         path = f"/v2/providers/fms/apis/api/v2/vendors/{vendor_id}/contract/list"
         
         return self._request("GET", path)
+
+    def expire_download_coupons(
+        self,
+        expire_list: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """
+        다운로드쿠폰 파기 (만료 처리)
+        
+        Args:
+            expire_list: 파기할 쿠폰 목록
+                [
+                    {
+                        "couponId": 16513129,
+                        "reason": "expired",
+                        "userId": "testId123"
+                    },
+                    ...
+                ]
+        
+        Returns:
+            API 응답 전체 (list)
+            [
+                {
+                    "requestResultStatus": "SUCCESS",
+                    "body": {
+                        "couponId": 16513129,
+                        "requestTransactionId": "et5_165131291561017478962"
+                    },
+                    "errorCode": null,
+                    "errorMessage": null
+                },
+                ...
+            ]
+        
+        Raises:
+            requests.RequestException: 네트워크 오류
+            ValueError: API 오류 응답
+        """
+        path = "/v2/providers/marketplace_openapi/apis/api/v1/coupons/expire"
+        
+        payload = {
+            "expireCouponList": expire_list
+        }
+        
+        return self._request("POST", path, json_data=payload)

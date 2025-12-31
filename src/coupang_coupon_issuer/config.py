@@ -42,6 +42,11 @@ def get_log_file(base_dir: Path) -> Path:
     """issuer.log 파일 경로 반환"""
     return base_dir / "issuer.log"
 
+
+def get_download_coupons_file(base_dir: Path) -> Path:
+    """download_coupons.json 파일 경로 반환 (다운로드쿠폰 ID 기록)"""
+    return base_dir / "download_coupons.json"
+
 # 레거시 경로 (제거 예정)
 EXCEL_RESULT_DIR = "results"  # ADR 009에서 결과 출력 제거로 사용하지 않음
 

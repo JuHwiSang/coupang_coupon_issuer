@@ -4,6 +4,78 @@
 
 ---
 
+## 2026-01-01 (다운로드쿠폰 파기 및 재발급 기능 추가)
+
+### 다운로드쿠폰 파기 워크플로우 구현 (ADR 023)
+
+**배경**: 클라이언트 요청으로 다운로드쿠폰에 대한 파기 및 재발급 기능 필요
+
+**주요 변경사항**:
+
+1. **Coupang API 레이어 확장** (`coupang_api.py`):
+   - `expire_download_coupons()` 메서드 추가
+   - API 경로: `POST /v2/providers/marketplace_openapi/apis/api/v1/coupons/expire`
+   - 배열 형식 요청/응답 처리
+
+2. **쿠폰 ID 기록 관리** (`issuer.py`):
+   - JSON 파일 형식 사용: `download_coupons.json`
+   - 파일 구조:
+     ```json
+     {
+       "last_updated": "2026-01-01 00:00:00",
+       "coupons": [
+         {"name": "쿠폰이름", "coupon_id": 12345, "issued_at": "2026-01-01 00:00:00"}
+       ]
+     }
+     ```
+   - 메서드 추가:
+     - `_load_download_coupon_records()`: 기록 파일 읽기
+     - `_save_download_coupon_records()`: 기록 파일 저장
+     - `_save_download_coupon_record()`: 단일 기록 추가
+     - `_expire_previous_download_coupons()`: 이전 쿠폰 파기
+
+3. **발급 워크플로우 변경** (`issuer.py:issue()`):
+   ```
+   1. 엑셀 파일 읽기
+   2. 이전 다운로드쿠폰 파기 (신규 단계)
+   3. 새 쿠폰 발급
+      - 즉시할인쿠폰: 기존 로직 유지
+      - 다운로드쿠폰: 발급 후 ID 기록
+   4. 결과 출력
+   ```
+
+4. **경로 관리** (`config.py`):
+   - `get_download_coupons_file()` 함수 추가
+   - 파일 위치: `{base_dir}/download_coupons.json`
+
+**하위 호환성 전략**:
+- 기존 배포 인스턴스 존재로 인해 **warning-only** 접근 방식 사용
+- `download_coupons.json` 파일 없음 → WARNING 출력 후 계속 진행
+- 파일 파싱 실패 → WARNING 출력 후 계속 진행
+- 파기 API 실패 → WARNING 출력 후 계속 진행
+- **오류가 아닌 경고로 처리하여 기존 시스템 정상 동작 보장**
+
+**즉시할인쿠폰 제외**:
+- 클라이언트가 다운로드쿠폰에 대해서만 파기 필요성을 요청
+- 골드플레이팅 방지를 위해 즉시할인쿠폰은 파기 대상에서 제외
+
+**배포 후 디렉토리 구조**:
+```
+~/my-coupons/
+├── config.json                  # API 키 + UUID (600 권한)
+├── coupons.xlsx                 # 쿠폰 정의 (사용자 배치)
+├── download_coupons.json        # 다운로드쿠폰 ID 기록 (자동 생성) ← 신규
+└── issuer.log                   # 실행 로그 (자동 생성)
+```
+
+**문서 추가**:
+- [download-coupon-expire-api.md](coupang/download-coupon-expire-api.md): 파기 API 규격
+- [ADR 023](adr/023-download-coupon-expiration.md): 아키텍처 결정 기록
+
+**참조**: [ADR 023](adr/023-download-coupon-expiration.md)
+
+---
+
 ## 2025-12-27 (GitHub Actions 빌드 플랫폼)
 
 ### PyInstaller 빌드 환경: ubuntu-22.04

@@ -931,3 +931,356 @@ class TestIssuerEdgeCases:
 
         # General check (line 307) happens before FIXED_WITH_QUANTITY check (line 344)
         assert "할인금액/비율은 0보다 커야 합니다" in str(exc_info.value)
+
+
+@pytest.mark.unit
+class TestDownloadCouponRecordManagement:
+    """Test download coupon record management methods"""
+
+    def test_load_records_file_not_exists(self, tmp_path, capsys):
+        """Test _load_download_coupon_records() when file doesn't exist"""
+        issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
+        
+        records = issuer._load_download_coupon_records()
+        
+        # Should return empty list
+        assert records == []
+        
+        # Should print warning
+        captured = capsys.readouterr()
+        assert "WARNING: 다운로드쿠폰 기록 파일이 없습니다" in captured.out
+        assert "WARNING: 이전 쿠폰 파기를 건너뜁니다" in captured.out
+
+    def test_load_records_file_exists(self, tmp_path):
+        """Test _load_download_coupon_records() when file exists"""
+        issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
+        
+        # Create test file
+        test_data = {
+            "last_updated": "2026-01-01 00:00:00",
+            "coupons": [
+                {"name": "쿠폰1", "coupon_id": 12345, "issued_at": "2026-01-01 00:00:00"},
+                {"name": "쿠폰2", "coupon_id": 67890, "issued_at": "2026-01-01 00:00:00"}
+            ]
+        }
+        
+        import json
+        with open(issuer.download_coupons_file, 'w', encoding='utf-8') as f:
+            json.dump(test_data, f)
+        
+        records = issuer._load_download_coupon_records()
+        
+        assert len(records) == 2
+        assert records[0]["name"] == "쿠폰1"
+        assert records[0]["coupon_id"] == 12345
+        assert records[1]["name"] == "쿠폰2"
+        assert records[1]["coupon_id"] == 67890
+
+    def test_load_records_json_parse_error(self, tmp_path, capsys):
+        """Test _load_download_coupon_records() with invalid JSON"""
+        issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
+        
+        # Create invalid JSON file
+        with open(issuer.download_coupons_file, 'w') as f:
+            f.write("{ invalid json }")
+        
+        records = issuer._load_download_coupon_records()
+        
+        # Should return empty list
+        assert records == []
+        
+        # Should print error and warning
+        captured = capsys.readouterr()
+        assert "ERROR: 다운로드쿠폰 기록 파일 파싱 실패" in captured.out
+        assert "WARNING: 이전 쿠폰 파기를 건너뜁니다" in captured.out
+
+    def test_save_records(self, tmp_path):
+        """Test _save_download_coupon_records()"""
+        issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
+        
+        test_records = [
+            {"name": "쿠폰1", "coupon_id": 12345, "issued_at": "2026-01-01 00:00:00"},
+            {"name": "쿠폰2", "coupon_id": 67890, "issued_at": "2026-01-01 00:00:00"}
+        ]
+        
+        issuer._save_download_coupon_records(test_records)
+        
+        # Verify file exists
+        assert issuer.download_coupons_file.exists()
+        
+        # Verify content
+        import json
+        with open(issuer.download_coupons_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        assert "last_updated" in data
+        assert "coupons" in data
+        assert len(data["coupons"]) == 2
+        assert data["coupons"][0]["name"] == "쿠폰1"
+        assert data["coupons"][1]["name"] == "쿠폰2"
+
+    def test_save_single_record(self, tmp_path):
+        """Test _save_download_coupon_record() helper method"""
+        issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
+        
+        # Save first record
+        record1 = {"name": "쿠폰1", "coupon_id": 12345, "issued_at": "2026-01-01 00:00:00"}
+        issuer._save_download_coupon_record(record1)
+        
+        # Save second record
+        record2 = {"name": "쿠폰2", "coupon_id": 67890, "issued_at": "2026-01-01 00:00:01"}
+        issuer._save_download_coupon_record(record2)
+        
+        # Load and verify
+        records = issuer._load_download_coupon_records()
+        assert len(records) == 2
+        assert records[0]["name"] == "쿠폰1"
+        assert records[1]["name"] == "쿠폰2"
+
+
+@pytest.mark.unit
+class TestDownloadCouponExpiration:
+    """Test download coupon expiration logic"""
+
+    def test_expire_no_records(self, tmp_path, capsys):
+        """Test _expire_previous_download_coupons() when no records exist"""
+        issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
+        
+        issuer._expire_previous_download_coupons()
+        
+        captured = capsys.readouterr()
+        assert "파기할 이전 다운로드쿠폰이 없습니다" in captured.out
+
+    def test_expire_with_records_success(self, tmp_path, requests_mock, capsys):
+        """Test _expire_previous_download_coupons() with successful expiration"""
+        issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
+        
+        # Create test records
+        test_records = [
+            {"name": "쿠폰1", "coupon_id": 12345, "issued_at": "2026-01-01 00:00:00"},
+            {"name": "쿠폰2", "coupon_id": 67890, "issued_at": "2026-01-01 00:00:00"}
+        ]
+        issuer._save_download_coupon_records(test_records)
+        
+        # Mock expire API
+        requests_mock.post(
+            "https://api-gateway.coupang.com/v2/providers/marketplace_openapi/apis/api/v1/coupons/expire",
+            status_code=200,
+            json=[
+                {
+                    "requestResultStatus": "SUCCESS",
+                    "body": {"couponId": 12345, "requestTransactionId": "tx1"},
+                    "errorCode": None,
+                    "errorMessage": None
+                },
+                {
+                    "requestResultStatus": "SUCCESS",
+                    "body": {"couponId": 67890, "requestTransactionId": "tx2"},
+                    "errorCode": None,
+                    "errorMessage": None
+                }
+            ]
+        )
+        
+        issuer._expire_previous_download_coupons()
+        
+        # Verify API was called
+        assert requests_mock.call_count == 1
+        request_body = requests_mock.last_request.json()
+        assert len(request_body["expireCouponList"]) == 2
+        assert request_body["expireCouponList"][0]["couponId"] == 12345
+        assert request_body["expireCouponList"][1]["couponId"] == 67890
+        
+        # Verify logs
+        captured = capsys.readouterr()
+        assert "이전 다운로드쿠폰 파기 시작 (총 2개)" in captured.out
+        assert "다운로드쿠폰 파기 완료: couponId=12345" in captured.out
+        assert "다운로드쿠폰 파기 완료: couponId=67890" in captured.out
+        assert "이전 다운로드쿠폰 파기 완료 (성공: 2, 실패: 0)" in captured.out
+        
+        # Verify records cleared
+        records = issuer._load_download_coupon_records()
+        assert len(records) == 0
+
+    def test_expire_with_api_failure(self, tmp_path, requests_mock, capsys):
+        """Test _expire_previous_download_coupons() with API failure"""
+        issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
+        
+        # Create test records
+        test_records = [
+            {"name": "쿠폰1", "coupon_id": 12345, "issued_at": "2026-01-01 00:00:00"}
+        ]
+        issuer._save_download_coupon_records(test_records)
+        
+        # Mock API error
+        requests_mock.post(
+            "https://api-gateway.coupang.com/v2/providers/marketplace_openapi/apis/api/v1/coupons/expire",
+            exc=Exception("Network error")
+        )
+        
+        # Should not raise - error is caught and logged
+        issuer._expire_previous_download_coupons()
+        
+        captured = capsys.readouterr()
+        assert "ERROR: 다운로드쿠폰 파기 중 오류 발생" in captured.out
+        assert "WARNING: 이전 쿠폰 파기 실패, 계속 진행합니다" in captured.out
+
+    def test_expire_mixed_success_failure(self, tmp_path, requests_mock, capsys):
+        """Test _expire_previous_download_coupons() with mixed results"""
+        issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
+        
+        # Create test records
+        test_records = [
+            {"name": "쿠폰1", "coupon_id": 12345, "issued_at": "2026-01-01 00:00:00"},
+            {"name": "쿠폰2", "coupon_id": 67890, "issued_at": "2026-01-01 00:00:00"}
+        ]
+        issuer._save_download_coupon_records(test_records)
+        
+        # Mock API with mixed results
+        requests_mock.post(
+            "https://api-gateway.coupang.com/v2/providers/marketplace_openapi/apis/api/v1/coupons/expire",
+            status_code=200,
+            json=[
+                {
+                    "requestResultStatus": "SUCCESS",
+                    "body": {"couponId": 12345, "requestTransactionId": "tx1"},
+                    "errorCode": None,
+                    "errorMessage": None
+                },
+                {
+                    "requestResultStatus": "FAIL",
+                    "body": {"couponId": 67890},
+                    "errorCode": "COUPON_NOT_FOUND",
+                    "errorMessage": "expire할 쿠폰이 존재하지 않습니다."
+                }
+            ]
+        )
+        
+        issuer._expire_previous_download_coupons()
+        
+        captured = capsys.readouterr()
+        assert "이전 다운로드쿠폰 파기 완료 (성공: 1, 실패: 1)" in captured.out
+        assert "다운로드쿠폰 파기 완료: couponId=12345" in captured.out
+        assert "WARNING: 다운로드쿠폰 파기 실패: couponId=67890" in captured.out
+
+
+@pytest.mark.unit
+class TestDownloadCouponWorkflow:
+    """Test integrated workflow with download coupon expiration"""
+
+    def test_issue_with_expiration_workflow(self, tmp_path, requests_mock, capsys):
+        """Test full workflow: expire old coupons → issue new → save records"""
+        # Setup Excel
+        excel_file = tmp_path / "coupons.xlsx"
+        wb = Workbook()
+        ws = wb.active
+        assert ws is not None
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["다운로드쿠폰", "다운로드쿠폰", 15, "정액할인", 500, 10000, 10000, 100, "123456789"])
+        wb.save(excel_file)
+        
+        issuer = CouponIssuer(tmp_path, "a", "s", "test-user", "v")
+        
+        # Create old records
+        old_records = [
+            {"name": "이전쿠폰", "coupon_id": 99999, "issued_at": "2025-12-31 00:00:00"}
+        ]
+        issuer._save_download_coupon_records(old_records)
+        
+        # Mock expire API
+        requests_mock.post(
+            "https://api-gateway.coupang.com/v2/providers/marketplace_openapi/apis/api/v1/coupons/expire",
+            status_code=200,
+            json=[
+                {
+                    "requestResultStatus": "SUCCESS",
+                    "body": {"couponId": 99999, "requestTransactionId": "tx_old"},
+                    "errorCode": None,
+                    "errorMessage": None
+                }
+            ]
+        )
+        
+        # Mock create download coupon API
+        requests_mock.post(
+            "https://api-gateway.coupang.com/v2/providers/marketplace_openapi/apis/api/v1/coupons",
+            status_code=200,
+            json={"code": 200, "couponId": 88888}  # API returns couponId directly, not in data
+        )
+        
+        # Mock apply download coupon API
+        requests_mock.put(
+            "https://api-gateway.coupang.com/v2/providers/marketplace_openapi/apis/api/v1/coupon-items",
+            status_code=200,
+            json=[{
+                "requestResultStatus": "SUCCESS",
+                "body": {"couponId": 88888, "requestTransactionId": "tx_new"},
+                "errorCode": None,
+                "errorMessage": None
+            }]
+        )
+        
+        # Run issue
+        issuer.issue()
+        
+        # Verify expiration happened
+        captured = capsys.readouterr()
+        assert "이전 다운로드쿠폰 파기 시작 (총 1개)" in captured.out
+        assert "다운로드쿠폰 파기 완료: couponId=99999" in captured.out
+        
+        # Verify new coupon issued
+        assert "쿠폰 발급 완료! (성공: 1, 실패: 0)" in captured.out
+        
+        # Verify new record saved
+        records = issuer._load_download_coupon_records()
+        assert len(records) == 1
+        assert records[0]["name"] == "다운로드쿠폰"
+        assert records[0]["coupon_id"] == 88888
+
+    def test_issue_first_run_no_expiration(self, tmp_path, requests_mock, capsys):
+        """Test first run with no previous records (backward compatibility)"""
+        # Setup Excel
+        excel_file = tmp_path / "coupons.xlsx"
+        wb = Workbook()
+        ws = wb.active
+        assert ws is not None
+        ws.append(["쿠폰이름", "쿠폰타입", "쿠폰유효기간", "할인방식", "할인금액/비율", "최소구매금액", "최대할인금액", "발급개수", "옵션ID"])
+        ws.append(["다운로드쿠폰", "다운로드쿠폰", 15, "정액할인", 500, 10000, 10000, 100, "123456789"])
+        wb.save(excel_file)
+        
+        issuer = CouponIssuer(tmp_path, "a", "s", "test-user", "v")
+        
+        # Mock create download coupon API
+        requests_mock.post(
+            "https://api-gateway.coupang.com/v2/providers/marketplace_openapi/apis/api/v1/coupons",
+            status_code=200,
+            json={"code": 200, "couponId": 77777}  # API returns couponId directly
+        )
+        
+        # Mock apply download coupon API
+        requests_mock.put(
+            "https://api-gateway.coupang.com/v2/providers/marketplace_openapi/apis/api/v1/coupon-items",
+            status_code=200,
+            json=[{
+                "requestResultStatus": "SUCCESS",
+                "body": {"couponId": 77777, "requestTransactionId": "tx"},
+                "errorCode": None,
+                "errorMessage": None
+            }]
+        )
+        
+        # Run issue
+        issuer.issue()
+        
+        # Verify warning about missing file
+        captured = capsys.readouterr()
+        assert "WARNING: 다운로드쿠폰 기록 파일이 없습니다" in captured.out
+        assert "파기할 이전 다운로드쿠폰이 없습니다" in captured.out
+        
+        # Verify new coupon issued
+        assert "쿠폰 발급 완료! (성공: 1, 실패: 0)" in captured.out
+        
+        # Verify new record saved
+        records = issuer._load_download_coupon_records()
+        assert len(records) == 1
+        assert records[0]["coupon_id"] == 77777
