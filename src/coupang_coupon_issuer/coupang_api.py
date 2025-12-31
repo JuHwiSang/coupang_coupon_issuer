@@ -121,15 +121,15 @@ class CoupangAPIClient:
             )
 
             # ===== 응답 로깅 (HTTP RAW 형식) =====
-            logger.debug(f"\n{'='*80}")
+            logger.debug(f"{'='*80}")
             logger.debug(f"HTTP RESPONSE")
             logger.debug(f"{'='*80}")
             logger.debug(f"Status Code: {response.status_code} {response.reason}")
-            logger.debug(f"\n--- Response Headers ---")
+            logger.debug(f"--- Response Headers ---")
             for header_name, header_value in response.headers.items():
                 logger.debug(f"{header_name}: {header_value}")
             
-            logger.debug(f"\n--- Response Body (Raw) ---")
+            logger.debug(f"--- Response Body (Raw) ---")
             logger.debug(response.text)
             logger.debug(f"{'='*80}\n")
 
