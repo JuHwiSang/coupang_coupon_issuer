@@ -9,6 +9,7 @@ Coupang Coupon Issuer - 매일 0시에 쿠폰을 발급하는 서비스
     ./coupang_coupon_issuer uninstall [디렉토리]
 """
 
+import logging
 import sys
 import argparse
 from datetime import datetime
@@ -17,11 +18,14 @@ from pathlib import Path
 # 개발 시 모듈 경로 추가
 sys.path.insert(0, str(Path(__file__).parent))
 
-from coupang_coupon_issuer.config import ConfigManager, get_excel_file
+from coupang_coupon_issuer.logging_config import setup_logging
+from coupang_coupon_issuer.config import ConfigManager, get_excel_file, get_base_dir, get_log_file
 from coupang_coupon_issuer.issuer import CouponIssuer
 from coupang_coupon_issuer.service import CrontabService
 from coupang_coupon_issuer.reader import fetch_coupons_from_excel, DISCOUNT_TYPE_EN_TO_KR
 from coupang_coupon_issuer.utils import kor_align, get_visual_width
+
+logger = logging.getLogger(__name__)
 
 
 def cmd_verify(args) -> None:
@@ -35,20 +39,20 @@ def cmd_verify(args) -> None:
         excel_path = get_excel_file(base_dir)
 
     if not excel_path.exists():
-        print(f"ERROR: {excel_path} 파일을 찾을 수 없습니다", flush=True)
+        logger.error(f"{excel_path} 파일을 찾을 수 없습니다")
         sys.exit(1)
 
-    print(f"엑셀 파일 검증 중: {excel_path}", flush=True)
+    logger.info(f"엑셀 파일 검증 중: {excel_path}")
 
     # 엑셀 검증 (reader 모듈 사용)
     try:
         coupons = fetch_coupons_from_excel(excel_path)
     except Exception as e:
-        print(f"ERROR: 엑셀 로드 실패: {e}", flush=True)
+        logger.error(f"엑셀 로드 실패: {e}")
         sys.exit(1)
 
     # 테이블 형식 출력 (엑셀처럼)
-    print(f"\n✓ {len(coupons)}개 쿠폰 로드 완료\n", flush=True)
+    print(f"\n✓ {len(coupons)}개 쿠폰 로드 완료\n")
 
     # 헤더 (9개 컬럼 + 예산)
     headers = [
@@ -127,12 +131,16 @@ def cmd_verify(args) -> None:
         print("  ".join(row))
 
     print("-" * visual_width)
-    print("\n검증 완료. 문제없이 발급 가능합니다.\n", flush=True)
+    print("\n검증 완료. 문제없이 발급 가능합니다.\n")
 
 
 def cmd_issue(args) -> None:
     """단발성 쿠폰 발급 (옵션으로 jitter 적용 가능)"""
     base_dir = Path(args.directory).resolve()
+    
+    # 파일 로깅 활성화
+    log_file = get_log_file(base_dir)
+    setup_logging(log_file=log_file)
 
     # 1. Jitter 처리 (선택사항)
     if hasattr(args, 'jitter_max') and args.jitter_max is not None and args.jitter_max > 0:
@@ -142,21 +150,20 @@ def cmd_issue(args) -> None:
             scheduler = JitterScheduler(max_jitter_minutes=args.jitter_max)
             scheduler.wait_with_jitter()
         except ValueError as e:
-            print(f"ERROR: Jitter 설정 오류: {e}", flush=True)
+            logger.error(f"Jitter 설정 오류: {e}")
             sys.exit(1)
         except KeyboardInterrupt:
-            print("\n쿠폰 발급이 중단되었습니다.", flush=True)
+            logger.info("\n쿠폰 발급이 중단되었습니다.")
             sys.exit(130)
 
     # 2. 쿠폰 발급 시작
-    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    print(f"[{timestamp}] 쿠폰 발급 시작...", flush=True)
+    logger.info("쿠폰 발급 시작...")
 
     # config.json에서 API 키 로드
     try:
         access_key, secret_key, user_id, vendor_id = ConfigManager.load_credentials(base_dir)
     except Exception as e:
-        print(f"ERROR: API 키 로드 실패: {e}", flush=True)
+        logger.error(f"API 키 로드 실패: {e}")
         sys.exit(1)
 
     # 쿠폰 발급 실행
@@ -170,7 +177,7 @@ def cmd_issue(args) -> None:
         )
         issuer.issue()
     except Exception as e:
-        print(f"ERROR: 쿠폰 발급 실패: {e}", flush=True)
+        logger.error(f"쿠폰 발급 실패: {e}")
         sys.exit(1)
 
 
@@ -180,7 +187,7 @@ def cmd_setup(args) -> None:
     try:
         CrontabService.setup()
     except Exception as e:
-        print(f"ERROR: {e}", flush=True)
+        logger.error(str(e))
         sys.exit(1)
 
 
@@ -213,7 +220,7 @@ def cmd_install(args) -> None:
     # Jitter 범위 검증 (선택사항)
     if hasattr(args, 'jitter_max') and args.jitter_max is not None:
         if not (1 <= args.jitter_max <= 120):
-            print(f"ERROR: --jitter-max는 1-120 범위여야 합니다 (현재: {args.jitter_max})", flush=True)
+            logger.error(f"--jitter-max는 1-120 범위여야 합니다 (현재: {args.jitter_max})")
             sys.exit(1)
 
     CrontabService.install(
@@ -234,6 +241,9 @@ def cmd_uninstall(args) -> None:
 
 def main() -> None:
     """메인 진입점"""
+    # 기본 콘솔 로깅 설정 (INFO 레벨)
+    setup_logging()
+    
     parser = argparse.ArgumentParser(
         description="Coupang Coupon Issuer - 매일 0시 쿠폰 발급 서비스",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -261,7 +271,7 @@ def main() -> None:
 
 서비스 관리:
   crontab -l                    # 스케줄 확인
-  tail -f [디렉토리]/issuer.log # 로그 확인
+  tail -f [디렉토리]/application.log # 로그 확인
         """
     )
 
@@ -346,7 +356,7 @@ def main() -> None:
     elif args.command == "uninstall":
         cmd_uninstall(args)
     else:
-        print(f"ERROR: 알 수 없는 명령어: {args.command}")
+        logger.error(f"알 수 없는 명령어: {args.command}")
         parser.print_help()
         sys.exit(1)
 

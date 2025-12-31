@@ -4,6 +4,52 @@
 
 ---
 
+## 2026-01-01 (로깅 시스템 리팩토링)
+
+### Python logging 모듈 기반으로 전환
+
+**배경**: 기존 수동 print 문 + timestamp 생성 방식의 문제점
+- 각 모듈에서 `datetime.now().strftime()`을 직접 호출하여 타임스탬프 생성
+- 비동기 작업이나 지연 발생 시 로그 순서가 실제 실행 순서와 불일치 가능
+- 로그 레벨 부재로 디버깅 시 중요 정보 필터링 불가
+- 분산된 로그 포맷 (`[timestamp]`, 단순 print 등)
+
+**주요 변경사항**:
+
+1. **새 로깅 모듈 생성** (`src/coupang_coupon_issuer/logging_config.py`):
+   - `setup_logging()`: 콘솔/파일 핸들러 설정
+   - 콘솔: INFO 레벨, 간단한 포맷 (`[timestamp] message`)
+   - 파일: DEBUG 레벨, 상세 포맷 (`[timestamp] [LEVEL] [module] message`)
+   - UTF-8 인코딩 지원
+
+2. **로그 파일명 변경** (`config.py`):
+   - `issuer.log` → `application.log`
+   - 이유: `issuer.log`는 하위 의존성에서 사용 중
+
+3. **main.py 초기화**:
+   - `main()` 시작 시 기본 콘솔 로깅 설정
+   - `issue` 명령어 실행 시 파일 로깅 추가 설정
+
+4. **모든 모듈 변환**:
+   - `issuer.py`: `_timestamp()` 메서드 제거, 모든 print → logger 호출
+   - `coupang_api.py`: 상세 HTTP 로그는 DEBUG 레벨 사용
+   - `service.py`: 설치/제거 과정 로그 변환
+   - `jitter.py`: Jitter 대기 로그 변환
+
+**로그 레벨 사용 기준**:
+- `DEBUG`: 상세 디버깅 정보 (API 요청/응답, 폴링 상태 등)
+- `INFO`: 일반 진행 상황 (쿠폰 발급 시작/완료, 설치 진행 등)
+- `WARNING`: 경고 (하위 호환성 문제, 파기 실패 등)
+- `ERROR`: 오류 (API 실패, 파일 읽기 실패 등)
+
+**효과**:
+- 타임스탬프 자동 생성으로 일관성 보장
+- 파일에는 모든 로그(DEBUG), 콘솔에는 중요 정보만(INFO)
+- 로그 레벨별 필터링 가능
+- 모듈명 자동 포함으로 디버깅 용이
+
+---
+
 ## 2026-01-01 (다운로드쿠폰 파기 및 재발급 기능 추가)
 
 ### 다운로드쿠폰 파기 워크플로우 구현 (ADR 023)

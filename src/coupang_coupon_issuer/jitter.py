@@ -3,9 +3,12 @@ Jitter 관리 모듈 - Thundering herd 방지를 위한 랜덤 지연
 
 ADR 011 참조: docs/adr/011-jitter-thundering-herd.md
 """
+import logging
 from random import randint
 from time import sleep
 from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
 
 
 class JitterScheduler:
@@ -63,16 +66,14 @@ class JitterScheduler:
         target_time = datetime.now() + timedelta(minutes=jitter_minutes)
 
         # 2. 시작 로그 출력
-        timestamp = self._timestamp()
         target_str = target_time.strftime('%H:%M:%S')
-        print(
-            f"[{timestamp}] Jitter 대기 시작 (목표: {target_str}, 지연: +{jitter_minutes}분)",
-            flush=True
+        logger.info(
+            f"Jitter 대기 시작 (목표: {target_str}, 지연: +{jitter_minutes}분)"
         )
 
         # 3. jitter가 0이면 즉시 반환
         if jitter_minutes == 0:
-            print(f"[{timestamp}] Jitter가 0분입니다. 즉시 실행합니다.", flush=True)
+            logger.info("Jitter가 0분입니다. 즉시 실행합니다.")
             return
 
         # 4. 폴링 루프 (조용히 대기)
@@ -81,15 +82,8 @@ class JitterScheduler:
                 sleep(self.POLL_INTERVAL_SECONDS)
 
         except KeyboardInterrupt:
-            timestamp = self._timestamp()
-            print(f"\n[{timestamp}] Jitter 대기가 중단되었습니다.", flush=True)
+            logger.info("\nJitter 대기가 중단되었습니다.")
             raise
 
         # 5. 완료 로그
-        timestamp = self._timestamp()
-        print(f"[{timestamp}] Jitter 대기 완료. 쿠폰 발급을 시작합니다.", flush=True)
-
-    @staticmethod
-    def _timestamp() -> str:
-        """현재 시각 문자열 반환 (YYYY-MM-DD HH:MM:SS 형식)"""
-        return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        logger.info("Jitter 대기 완료. 쿠폰 발급을 시작합니다.")

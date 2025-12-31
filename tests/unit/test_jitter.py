@@ -60,7 +60,7 @@ class TestJitterWaitZeroJitter:
     """Test wait_with_jitter() with zero jitter (no sleep)"""
 
     @patch('coupang_coupon_issuer.jitter.randint')
-    def test_wait_zero_jitter_immediate_return(self, mock_randint, capsys):
+    def test_wait_zero_jitter_immediate_return(self, mock_randint, caplog):
         """Immediate return when jitter is 0 minutes (no sleep needed)"""
         mock_randint.return_value = 0
 
@@ -68,10 +68,9 @@ class TestJitterWaitZeroJitter:
         scheduler.wait_with_jitter()
 
         # Check log output
-        captured = capsys.readouterr()
-        assert "Jitter가 0분입니다" in captured.out
-        assert "즉시 실행" in captured.out
-        assert "Jitter 대기 시작" in captured.out
+        assert "Jitter가 0분입니다" in caplog.text
+        assert "즉시 실행" in caplog.text
+        assert "Jitter 대기 시작" in caplog.text
 
 
 @pytest.mark.unit
@@ -82,7 +81,7 @@ class TestJitterWaitWithMocking:
     @patch('coupang_coupon_issuer.jitter.sleep')
     @patch('coupang_coupon_issuer.jitter.datetime')
     def test_wait_exits_when_target_reached(
-        self, mock_datetime, mock_sleep, mock_randint, capsys
+        self, mock_datetime, mock_sleep, mock_randint, caplog
     ):
         """Polling loop exits when target time is reached"""
         mock_randint.return_value = 1  # 1 minute jitter
@@ -115,13 +114,12 @@ class TestJitterWaitWithMocking:
             assert call[0][0] == 1
 
         # Check logs
-        captured = capsys.readouterr()
-        assert "Jitter 대기 시작" in captured.out
-        assert "Jitter 대기 완료" in captured.out
+        assert "Jitter 대기 시작" in caplog.text
+        assert "Jitter 대기 완료" in caplog.text
 
     @patch('coupang_coupon_issuer.jitter.randint')
     @patch('coupang_coupon_issuer.jitter.sleep')
-    def test_wait_keyboard_interrupt_handled(self, mock_sleep, mock_randint, capsys):
+    def test_wait_keyboard_interrupt_handled(self, mock_sleep, mock_randint, caplog):
         """Handle KeyboardInterrupt gracefully during sleep"""
         mock_randint.return_value = 5  # 5 minutes
         mock_sleep.side_effect = KeyboardInterrupt  # Interrupt on first sleep
@@ -132,8 +130,7 @@ class TestJitterWaitWithMocking:
             scheduler.wait_with_jitter()
 
         # Check interrupt message
-        captured = capsys.readouterr()
-        assert "중단되었습니다" in captured.out
+        assert "중단되었습니다" in caplog.text
 
     @patch('coupang_coupon_issuer.jitter.randint')
     @patch('coupang_coupon_issuer.jitter.sleep')
@@ -167,7 +164,7 @@ class TestJitterWaitWithMocking:
     @patch('coupang_coupon_issuer.jitter.sleep')
     @patch('coupang_coupon_issuer.jitter.datetime')
     def test_wait_logs_start_and_completion(
-        self, mock_datetime, mock_sleep, mock_randint, capsys
+        self, mock_datetime, mock_sleep, mock_randint, caplog
     ):
         """Verify start and completion logs are printed"""
         mock_randint.return_value = 5
@@ -187,16 +184,14 @@ class TestJitterWaitWithMocking:
         scheduler = JitterScheduler(max_jitter_minutes=60)
         scheduler.wait_with_jitter()
 
-        captured = capsys.readouterr()
-
         # Check start log
-        assert "Jitter 대기 시작" in captured.out
-        assert "목표:" in captured.out
-        assert "지연: +5분" in captured.out
+        assert "Jitter 대기 시작" in caplog.text
+        assert "목표:" in caplog.text
+        assert "지연: +5분" in caplog.text
 
         # Check completion log
-        assert "Jitter 대기 완료" in captured.out
-        assert "쿠폰 발급을 시작합니다" in captured.out
+        assert "Jitter 대기 완료" in caplog.text
+        assert "쿠폰 발급을 시작합니다" in caplog.text
 
     @patch('coupang_coupon_issuer.jitter.randint')
     @patch('coupang_coupon_issuer.jitter.sleep')
@@ -224,29 +219,3 @@ class TestJitterWaitWithMocking:
 
         # Verify randint called with (0, 120)
         mock_randint.assert_called_once_with(0, 120)
-
-
-@pytest.mark.unit
-class TestTimestampMethod:
-    """Test _timestamp() static method"""
-
-    @patch('coupang_coupon_issuer.jitter.datetime')
-    def test_timestamp_format(self, mock_datetime):
-        """Verify timestamp format is YYYY-MM-DD HH:MM:SS"""
-        mock_datetime.now.return_value = datetime(2024, 12, 20, 13, 45, 30)
-
-        timestamp = JitterScheduler._timestamp()
-
-        assert timestamp == "2024-12-20 13:45:30"
-
-    def test_timestamp_real_time(self):
-        """Test with real datetime (sanity check)"""
-        timestamp = JitterScheduler._timestamp()
-
-        # Should be in correct format
-        assert len(timestamp) == 19  # "YYYY-MM-DD HH:MM:SS"
-        assert timestamp[4] == '-'
-        assert timestamp[7] == '-'
-        assert timestamp[10] == ' '
-        assert timestamp[13] == ':'
-        assert timestamp[16] == ':'

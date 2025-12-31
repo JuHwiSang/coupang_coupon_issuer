@@ -1,11 +1,14 @@
 """설정 및 API 키 관리 모듈"""
 
+import logging
 import os
 import sys
 import json
 import uuid
 from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 # 서비스 설정
@@ -39,8 +42,8 @@ def get_excel_file(base_dir: Path) -> Path:
 
 
 def get_log_file(base_dir: Path) -> Path:
-    """issuer.log 파일 경로 반환"""
-    return base_dir / "issuer.log"
+    """application.log 파일 경로 반환"""
+    return base_dir / "application.log"
 
 
 def get_download_coupons_file(base_dir: Path) -> Path:
@@ -99,7 +102,7 @@ class ConfigManager:
         }
 
         config_file = get_config_file(base_dir)
-        print(f"설정 저장 중: {config_file}")
+        logger.info(f"설정 저장 중: {config_file}")
 
         # 디렉토리 생성 (없으면)
         config_file.parent.mkdir(parents=True, exist_ok=True)
@@ -111,9 +114,9 @@ class ConfigManager:
         # 파일 권한 설정 (사용자만 읽기/쓰기 가능)
         os.chmod(config_file, 0o600)
 
-        print(f"설정이 저장되었습니다: {config_file}")
-        print(f"Installation ID: {installation_id}")
-        print(f"파일 권한: 600 (사용자만 읽기/쓰기 가능)")
+        logger.info(f"설정이 저장되었습니다: {config_file}")
+        logger.info(f"Installation ID: {installation_id}")
+        logger.info(f"파일 권한: 600 (사용자만 읽기/쓰기 가능)")
 
         return installation_id
 
@@ -210,7 +213,7 @@ class ConfigManager:
         os.environ["COUPANG_USER_ID"] = user_id
         os.environ["COUPANG_VENDOR_ID"] = vendor_id
 
-        print(f"설정을 환경 변수로 로드했습니다")
+        logger.info("설정을 환경 변수로 로드했습니다")
 
     @staticmethod
     def get_from_env() -> tuple[str, str, str, str]:
@@ -248,6 +251,6 @@ class ConfigManager:
         config_file = get_config_file(base_dir)
         if config_file.exists():
             config_file.unlink()
-            print(f"설정 파일이 제거되었습니다: {config_file}")
+            logger.info(f"설정 파일이 제거되었습니다: {config_file}")
         else:
-            print(f"설정 파일이 존재하지 않습니다: {config_file}")
+            logger.info(f"설정 파일이 존재하지 않습니다: {config_file}")

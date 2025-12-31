@@ -537,7 +537,7 @@ class TestIssuanceWorkflow:
         assert len(request_body["policies"]) == 1
         assert request_body["policies"][0]["discount"] == 50
 
-    def test_issue_handles_api_failure(self, tmp_path, requests_mock, capsys):
+    def test_issue_handles_api_failure(self, tmp_path, requests_mock, caplog):
         """Test error handling when API call fails"""
         excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
@@ -558,12 +558,11 @@ class TestIssuanceWorkflow:
 
         issuer.issue()
 
-        # Verify log contains [FAIL] marker
-        captured = capsys.readouterr()
-        assert "[FAIL]" in captured.out
-        assert "실패쿠폰" in captured.out
+        # Verify log contains failure marker
+        assert "실패:" in caplog.text
+        assert "실패쿠폰" in caplog.text
 
-    def test_issue_mixed_success_failure(self, tmp_path, capsys):
+    def test_issue_mixed_success_failure(self, tmp_path, caplog):
         """Test mixed success and failure scenario"""
         excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
@@ -585,28 +584,25 @@ class TestIssuanceWorkflow:
                     'coupon_name': coupon['name'],
                     'coupon_type': coupon['type'],
                     'status': '실패',
-                    'message': 'Simulated failure',
-                    'timestamp': issuer._timestamp()
+                    'message': 'Simulated failure'
                 }
             else:
                 return {
                     'coupon_name': coupon['name'],
                     'coupon_type': coupon['type'],
                     'status': '성공',
-                    'message': 'Simulated success',
-                    'timestamp': issuer._timestamp()
+                    'message': 'Simulated success'
                 }
 
         with patch.object(issuer, '_issue_single_coupon', side_effect=mock_issue):
             issuer.issue()
 
         # Verify summary log
-        captured = capsys.readouterr()
-        assert "성공: 3, 실패: 1" in captured.out
-        assert "[OK] 성공쿠폰1" in captured.out
-        assert "[OK] 성공쿠폰2" in captured.out
-        assert "[OK] 성공쿠폰3" in captured.out
-        assert "[FAIL] 실패쿠폰" in captured.out
+        assert "성공: 3, 실패: 1" in caplog.text
+        assert "[OK] 성공쿠폰1" in caplog.text
+        assert "[OK] 성공쿠폰2" in caplog.text
+        assert "[OK] 성공쿠폰3" in caplog.text
+        assert "[FAIL] 실패쿠폰" in caplog.text
 
 
 
@@ -671,7 +667,7 @@ class TestIssuerEdgeCases:
 
         return _create
 
-    def test_issue_with_empty_coupon_list(self, empty_excel, capsys):
+    def test_issue_with_empty_coupon_list(self, empty_excel, caplog):
         """
         Test issue() with empty coupon list (헤더만 있고 데이터 없음).
 
@@ -682,8 +678,8 @@ class TestIssuerEdgeCases:
 
         issuer.issue()
 
-        captured = capsys.readouterr()
-        assert "발급할 쿠폰이 없습니다" in captured.out
+        # Verify log message
+        assert "발급할 쿠폰이 없습니다" in caplog.text
 
     def test_issue_propagates_excel_read_exception(self, tmp_path):
         """
@@ -701,7 +697,7 @@ class TestIssuerEdgeCases:
 
             assert "Excel error" in str(exc_info.value)
 
-    def test_issue_propagates_api_exception(self, tmp_path, requests_mock, capsys):
+    def test_issue_propagates_api_exception(self, tmp_path, requests_mock, caplog):
         """
         Test issue() handles API exception gracefully.
 
@@ -727,9 +723,9 @@ class TestIssuerEdgeCases:
         # Should not raise - exception is caught and logged
         issuer.issue()
 
-        captured = capsys.readouterr()
-        assert "실패: 1" in captured.out
-        assert "Connection timeout" in captured.out
+        # Verify log message
+        assert "실패: 1" in caplog.text
+        assert "Connection timeout" in caplog.text
 
     def test_issue_single_coupon_raises_on_zero_discount(self, tmp_path, coupon_dict_factory):
         """
@@ -937,7 +933,7 @@ class TestIssuerEdgeCases:
 class TestDownloadCouponRecordManagement:
     """Test download coupon record management methods"""
 
-    def test_load_records_file_not_exists(self, tmp_path, capsys):
+    def test_load_records_file_not_exists(self, tmp_path, caplog):
         """Test _load_download_coupon_records() when file doesn't exist"""
         issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
         
@@ -947,9 +943,9 @@ class TestDownloadCouponRecordManagement:
         assert records == []
         
         # Should print warning
-        captured = capsys.readouterr()
-        assert "WARNING: 다운로드쿠폰 기록 파일이 없습니다" in captured.out
-        assert "WARNING: 이전 쿠폰 파기를 건너뜁니다" in captured.out
+        # Using caplog
+        assert "다운로드쿠폰 기록 파일이 없습니다" in caplog.text
+        assert "이전 쿠폰 파기를 건너뜁니다" in caplog.text
 
     def test_load_records_file_exists(self, tmp_path):
         """Test _load_download_coupon_records() when file exists"""
@@ -976,7 +972,7 @@ class TestDownloadCouponRecordManagement:
         assert records[1]["name"] == "쿠폰2"
         assert records[1]["coupon_id"] == 67890
 
-    def test_load_records_json_parse_error(self, tmp_path, capsys):
+    def test_load_records_json_parse_error(self, tmp_path, caplog):
         """Test _load_download_coupon_records() with invalid JSON"""
         issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
         
@@ -990,9 +986,9 @@ class TestDownloadCouponRecordManagement:
         assert records == []
         
         # Should print error and warning
-        captured = capsys.readouterr()
-        assert "ERROR: 다운로드쿠폰 기록 파일 파싱 실패" in captured.out
-        assert "WARNING: 이전 쿠폰 파기를 건너뜁니다" in captured.out
+        # Using caplog
+        assert "다운로드쿠폰 기록 파일 파싱 실패" in caplog.text
+        assert "이전 쿠폰 파기를 건너뜁니다" in caplog.text
 
     def test_save_records(self, tmp_path):
         """Test _save_download_coupon_records()"""
@@ -1042,16 +1038,16 @@ class TestDownloadCouponRecordManagement:
 class TestDownloadCouponExpiration:
     """Test download coupon expiration logic"""
 
-    def test_expire_no_records(self, tmp_path, capsys):
+    def test_expire_no_records(self, tmp_path, caplog):
         """Test _expire_previous_download_coupons() when no records exist"""
         issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
         
         issuer._expire_previous_download_coupons()
         
-        captured = capsys.readouterr()
-        assert "파기할 이전 다운로드쿠폰이 없습니다" in captured.out
+        # Using caplog
+        assert "파기할 이전 다운로드쿠폰이 없습니다" in caplog.text
 
-    def test_expire_with_records_success(self, tmp_path, requests_mock, capsys):
+    def test_expire_with_records_success(self, tmp_path, requests_mock, caplog):
         """Test _expire_previous_download_coupons() with successful expiration"""
         issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
         
@@ -1092,17 +1088,17 @@ class TestDownloadCouponExpiration:
         assert request_body["expireCouponList"][1]["couponId"] == 67890
         
         # Verify logs
-        captured = capsys.readouterr()
-        assert "이전 다운로드쿠폰 파기 시작 (총 2개)" in captured.out
-        assert "다운로드쿠폰 파기 완료: couponId=12345" in captured.out
-        assert "다운로드쿠폰 파기 완료: couponId=67890" in captured.out
-        assert "이전 다운로드쿠폰 파기 완료 (성공: 2, 실패: 0)" in captured.out
+        # Using caplog
+        assert "이전 다운로드쿠폰 파기 시작 (총 2개)" in caplog.text
+        assert "다운로드쿠폰 파기 완료: couponId=12345" in caplog.text
+        assert "다운로드쿠폰 파기 완료: couponId=67890" in caplog.text
+        assert "이전 다운로드쿠폰 파기 완료 (성공: 2, 실패: 0)" in caplog.text
         
         # Verify records cleared
         records = issuer._load_download_coupon_records()
         assert len(records) == 0
 
-    def test_expire_with_api_failure(self, tmp_path, requests_mock, capsys):
+    def test_expire_with_api_failure(self, tmp_path, requests_mock, caplog):
         """Test _expire_previous_download_coupons() with API failure"""
         issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
         
@@ -1121,11 +1117,11 @@ class TestDownloadCouponExpiration:
         # Should not raise - error is caught and logged
         issuer._expire_previous_download_coupons()
         
-        captured = capsys.readouterr()
-        assert "ERROR: 다운로드쿠폰 파기 중 오류 발생" in captured.out
-        assert "WARNING: 이전 쿠폰 파기 실패, 계속 진행합니다" in captured.out
+        # Verify error logged
+        assert "다운로드쿠폰 파기 중 오류 발생" in caplog.text
+        assert "이전 쿠폰 파기 실패, 계속 진행합니다" in caplog.text
 
-    def test_expire_mixed_success_failure(self, tmp_path, requests_mock, capsys):
+    def test_expire_mixed_success_failure(self, tmp_path, requests_mock, caplog):
         """Test _expire_previous_download_coupons() with mixed results"""
         issuer = CouponIssuer(tmp_path, "a", "s", "u", "v")
         
@@ -1158,17 +1154,17 @@ class TestDownloadCouponExpiration:
         
         issuer._expire_previous_download_coupons()
         
-        captured = capsys.readouterr()
-        assert "이전 다운로드쿠폰 파기 완료 (성공: 1, 실패: 1)" in captured.out
-        assert "다운로드쿠폰 파기 완료: couponId=12345" in captured.out
-        assert "WARNING: 다운로드쿠폰 파기 실패: couponId=67890" in captured.out
+        # Verify logs
+        assert "이전 다운로드쿠폰 파기 완료 (성공: 1, 실패: 1)" in caplog.text
+        assert "다운로드쿠폰 파기 완료: couponId=12345" in caplog.text
+        assert "다운로드쿠폰 파기 실패: couponId=67890" in caplog.text
 
 
 @pytest.mark.unit
 class TestDownloadCouponWorkflow:
     """Test integrated workflow with download coupon expiration"""
 
-    def test_issue_with_expiration_workflow(self, tmp_path, requests_mock, capsys):
+    def test_issue_with_expiration_workflow(self, tmp_path, requests_mock, caplog):
         """Test full workflow: expire old coupons → issue new → save records"""
         # Setup Excel
         excel_file = tmp_path / "coupons.xlsx"
@@ -1224,12 +1220,12 @@ class TestDownloadCouponWorkflow:
         issuer.issue()
         
         # Verify expiration happened
-        captured = capsys.readouterr()
-        assert "이전 다운로드쿠폰 파기 시작 (총 1개)" in captured.out
-        assert "다운로드쿠폰 파기 완료: couponId=99999" in captured.out
+        # Using caplog
+        assert "이전 다운로드쿠폰 파기 시작 (총 1개)" in caplog.text
+        assert "다운로드쿠폰 파기 완료: couponId=99999" in caplog.text
         
         # Verify new coupon issued
-        assert "쿠폰 발급 완료! (성공: 1, 실패: 0)" in captured.out
+        assert "쿠폰 발급 완료! (성공: 1, 실패: 0)" in caplog.text
         
         # Verify new record saved
         records = issuer._load_download_coupon_records()
@@ -1237,7 +1233,7 @@ class TestDownloadCouponWorkflow:
         assert records[0]["name"] == "다운로드쿠폰"
         assert records[0]["coupon_id"] == 88888
 
-    def test_issue_first_run_no_expiration(self, tmp_path, requests_mock, capsys):
+    def test_issue_first_run_no_expiration(self, tmp_path, requests_mock, caplog):
         """Test first run with no previous records (backward compatibility)"""
         # Setup Excel
         excel_file = tmp_path / "coupons.xlsx"
@@ -1273,12 +1269,11 @@ class TestDownloadCouponWorkflow:
         issuer.issue()
         
         # Verify warning about missing file
-        captured = capsys.readouterr()
-        assert "WARNING: 다운로드쿠폰 기록 파일이 없습니다" in captured.out
-        assert "파기할 이전 다운로드쿠폰이 없습니다" in captured.out
+        assert "다운로드쿠폰 기록 파일이 없습니다" in caplog.text
+        assert "파기할 이전 다운로드쿠폰이 없습니다" in caplog.text
         
         # Verify new coupon issued
-        assert "쿠폰 발급 완료! (성공: 1, 실패: 0)" in captured.out
+        assert "쿠폰 발급 완료! (성공: 1, 실패: 0)" in caplog.text
         
         # Verify new record saved
         records = issuer._load_download_coupon_records()

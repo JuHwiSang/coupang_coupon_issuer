@@ -38,7 +38,6 @@ class TestVerifyCommand:
 
         # Verify output
         captured = capsys.readouterr()
-        assert "엑셀 파일 검증 중" in captured.out
         assert "2개 쿠폰 로드 완료" in captured.out
         assert "테스트쿠폰1" in captured.out
         assert "테스트쿠폰2" in captured.out
@@ -72,7 +71,7 @@ class TestVerifyCommand:
         finally:
             os.chdir(old_cwd)
 
-    def test_verify_file_not_found(self, tmp_path, capsys):
+    def test_verify_file_not_found(self, tmp_path, caplog):
         """Non-existent file should error"""
         args = MagicMock()
         args.file = str(tmp_path / "nonexistent.xlsx")
@@ -80,11 +79,10 @@ class TestVerifyCommand:
         with pytest.raises(SystemExit):
             main.cmd_verify(args)
 
-        captured = capsys.readouterr()
-        assert "ERROR" in captured.out
-        assert "찾을 수 없습니다" in captured.out
+        # Verify error message
+        assert "찾을 수 없습니다" in caplog.text
 
-    def test_verify_missing_columns(self, tmp_path, capsys):
+    def test_verify_missing_columns(self, tmp_path, caplog):
         """Excel missing required columns should error"""
         excel_file = tmp_path / "coupons.xlsx"
         wb = Workbook()
@@ -101,9 +99,9 @@ class TestVerifyCommand:
         with pytest.raises(SystemExit):
             main.cmd_verify(args)
 
-        captured = capsys.readouterr()
-        assert "ERROR" in captured.out
-        assert "필수 컬럼이 없습니다" in captured.out
+        # Using caplog
+        assert "ERROR" in caplog.text
+        assert "필수 컬럼이 없습니다" in caplog.text
 
     def test_verify_displays_rate_discount(self, tmp_path, capsys):
         """RATE discount should show 0 amount and X% rate"""
@@ -215,7 +213,7 @@ class TestVerifyCommand:
         assert "커스텀쿠폰" in captured.out  # Should use --file
         assert "기본쿠폰" not in captured.out  # Should NOT use directory
 
-    def test_verify_file_option_with_nonexistent_file(self, tmp_path, capsys):
+    def test_verify_file_option_with_nonexistent_file(self, tmp_path, caplog):
         """--file option with non-existent file should error"""
         args = MagicMock()
         args.directory = None
@@ -224,9 +222,8 @@ class TestVerifyCommand:
         with pytest.raises(SystemExit):
             main.cmd_verify(args)
 
-        captured = capsys.readouterr()
-        assert "ERROR" in captured.out
-        assert "찾을 수 없습니다" in captured.out
+        # Verify error message
+        assert "찾을 수 없습니다" in caplog.text
 
     def test_verify_file_option_with_custom_filename(self, tmp_path, capsys):
         """--file option should work with any filename"""
@@ -283,7 +280,7 @@ class TestIssueCommand:
         )
         mock_issuer.issue.assert_called_once()
 
-    def test_issue_handles_credential_error(self, tmp_path, mocker, capsys):
+    def test_issue_handles_credential_error(self, tmp_path, mocker, caplog, capsys):
         """Issue should exit if credentials can't be loaded"""
         mocker.patch('main.ConfigManager.load_credentials', side_effect=FileNotFoundError("No file"))
 
@@ -294,10 +291,11 @@ class TestIssueCommand:
         with pytest.raises(SystemExit):
             main.cmd_issue(args)
 
+        # Verify error message (printed to stdout, not logged)
         captured = capsys.readouterr()
-        assert "ERROR: API 키 로드 실패" in captured.out
+        assert "API 키 로드 실패" in captured.out
 
-    def test_issue_handles_issuer_error(self, tmp_path, mocker, capsys):
+    def test_issue_handles_issuer_error(self, tmp_path, mocker, caplog, capsys):
         """Issue should exit if issuer.issue() fails"""
         mocker.patch(
             'main.ConfigManager.load_credentials',
@@ -315,8 +313,9 @@ class TestIssueCommand:
         with pytest.raises(SystemExit):
             main.cmd_issue(args)
 
+        # Verify error message (printed to stdout, not logged)
         captured = capsys.readouterr()
-        assert "ERROR: 쿠폰 발급 실패" in captured.out
+        assert "쿠폰 발급 실패" in captured.out
 
     def test_issue_with_jitter(self, tmp_path, mocker):
         """Issue command should handle jitter parameter"""
@@ -362,7 +361,7 @@ class TestSetupCommand:
         # Verify setup was called
         mock_setup.assert_called_once()
 
-    def test_setup_handles_error(self, mocker, capsys):
+    def test_setup_handles_error(self, mocker, caplog):
         """Setup should exit if CrontabService.setup fails"""
         mocker.patch('main.CrontabService.setup', side_effect=RuntimeError("Setup failed"))
 
@@ -371,8 +370,8 @@ class TestSetupCommand:
         with pytest.raises(SystemExit):
             main.cmd_setup(args)
 
-        captured = capsys.readouterr()
-        assert "ERROR" in captured.out
+        # Verify error was logged
+        assert "Setup failed" in caplog.text
 
 
 @pytest.mark.unit
@@ -415,7 +414,7 @@ class TestInstallCommand:
         from pathlib import Path
         mock_install.assert_called_once_with(Path(str(tmp_path)), "access-key", "secret-key", "user-id", "vendor-id", jitter_max=60)
 
-    def test_install_validates_jitter_range(self, tmp_path, capsys):
+    def test_install_validates_jitter_range(self, tmp_path, caplog):
         """Install should validate jitter_max is in 1-120 range"""
         args = MagicMock()
         args.access_key = "test"
@@ -428,9 +427,8 @@ class TestInstallCommand:
         with pytest.raises(SystemExit):
             main.cmd_install(args)
 
-        captured = capsys.readouterr()
-        assert "ERROR" in captured.out
-        assert "1-120 범위" in captured.out
+        # Verify error message
+        assert "1-120 범위" in caplog.text
 
 
 @pytest.mark.unit

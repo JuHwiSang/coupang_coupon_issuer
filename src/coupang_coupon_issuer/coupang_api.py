@@ -1,5 +1,6 @@
 """Coupang API 클라이언트 모듈"""
 
+import logging
 import os
 import hmac
 import hashlib
@@ -10,6 +11,8 @@ from typing import Optional, Dict, Any, List
 from urllib.parse import urljoin
 
 import requests
+
+logger = logging.getLogger(__name__)
 
 # GMT+0 타임존 설정 (HMAC 서명 생성용)
 os.environ['TZ'] = 'GMT+0'
@@ -89,26 +92,24 @@ class CoupangAPIClient:
             "Content-Type": "application/json;charset=UTF-8",
             "Authorization": self._generate_hmac(method, path),
         }
-
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
         # ===== 요청 로깅 (HTTP RAW 형식) =====
-        print(f"\n{'='*80}", flush=True)
-        print(f"[{timestamp}] HTTP REQUEST", flush=True)
-        print(f"{'='*80}", flush=True)
-        print(f"{method} {path}", flush=True)
-        print(f"Full URL: {url}", flush=True)
-        print(f"\n--- Request Headers ---", flush=True)
+        logger.debug(f"\n{'='*80}")
+        logger.debug(f"HTTP REQUEST")
+        logger.debug(f"{'='*80}")
+        logger.debug(f"{method} {path}")
+        logger.debug(f"Full URL: {url}")
+        logger.debug(f"\n--- Request Headers ---")
         for header_name, header_value in headers.items():
-            print(f"{header_name}: {header_value}", flush=True)
+            logger.debug(f"{header_name}: {header_value}")
         
         if json_data:
-            print(f"\n--- Request Body (JSON) ---", flush=True)
-            print(json.dumps(json_data, indent=2, ensure_ascii=False), flush=True)
+            logger.debug(f"\n--- Request Body (JSON) ---")
+            logger.debug(json.dumps(json_data, indent=2, ensure_ascii=False))
         else:
-            print(f"\n--- Request Body ---", flush=True)
-            print("(empty)", flush=True)
-        print(f"{'='*80}\n", flush=True)
+            logger.debug(f"\n--- Request Body ---")
+            logger.debug("(empty)")
+        logger.debug(f"{'='*80}\n")
 
         try:
             response = self.session.request(
@@ -120,17 +121,17 @@ class CoupangAPIClient:
             )
 
             # ===== 응답 로깅 (HTTP RAW 형식) =====
-            print(f"\n{'='*80}", flush=True)
-            print(f"[{timestamp}] HTTP RESPONSE", flush=True)
-            print(f"{'='*80}", flush=True)
-            print(f"Status Code: {response.status_code} {response.reason}", flush=True)
-            print(f"\n--- Response Headers ---", flush=True)
+            logger.debug(f"\n{'='*80}")
+            logger.debug(f"HTTP RESPONSE")
+            logger.debug(f"{'='*80}")
+            logger.debug(f"Status Code: {response.status_code} {response.reason}")
+            logger.debug(f"\n--- Response Headers ---")
             for header_name, header_value in response.headers.items():
-                print(f"{header_name}: {header_value}", flush=True)
+                logger.debug(f"{header_name}: {header_value}")
             
-            print(f"\n--- Response Body (Raw) ---", flush=True)
-            print(response.text, flush=True)
-            print(f"{'='*80}\n", flush=True)
+            logger.debug(f"\n--- Response Body (Raw) ---")
+            logger.debug(response.text)
+            logger.debug(f"{'='*80}\n")
 
             # HTTP 오류 체크: 4xx, 5xx만 에러로 처리
             if response.status_code >= 400:
@@ -152,14 +153,14 @@ class CoupangAPIClient:
                 error_msg = result.get('errorMessage') or result.get('message', 'Unknown error')
                 raise ValueError(f"API Error (code {result['code']}): {error_msg}")
 
-            print(f"[{timestamp}] API 응답: 성공 (HTTP {response.status_code})", flush=True)
+            logger.debug(f"API 응답: 성공 (HTTP {response.status_code})")
             return result
 
         except requests.Timeout:
-            print(f"[{timestamp}] ERROR: API 타임아웃 ({timeout}초 초과)", flush=True)
+            logger.error(f"API 타임아웃 ({timeout}초 초과)")
             raise
         except requests.RequestException as e:
-            print(f"[{timestamp}] ERROR: API 요청 실패: {e}", flush=True)
+            logger.error(f"API 요청 실패: {e}")
             raise
 
     def create_instant_coupon(

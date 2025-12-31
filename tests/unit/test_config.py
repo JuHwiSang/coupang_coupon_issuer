@@ -48,9 +48,9 @@ class TestPathFunctions:
         assert result == tmp_path / "coupons.xlsx"
 
     def test_get_log_file(self, tmp_path):
-        """get_log_file() should return base_dir / issuer.log"""
+        """get_log_file() should return base_dir / application.log"""
         result = get_log_file(tmp_path)
-        assert result == tmp_path / "issuer.log"
+        assert result == tmp_path / "application.log"
 
     def test_get_download_coupons_file(self, tmp_path):
         """get_download_coupons_file() should return base_dir / download_coupons.json"""
@@ -73,7 +73,7 @@ class TestConstants:
 class TestConfigManagerSave:
     """Test ConfigManager.save_config()"""
 
-    def test_save_config_creates_file(self, mock_config_paths, capsys):
+    def test_save_config_creates_file(self, mock_config_paths, caplog):
         """save_config should create config.json with all fields"""
         installation_id = ConfigManager.save_config(
             mock_config_paths,
@@ -99,9 +99,8 @@ class TestConfigManagerSave:
         assert len(installation_id) == 36  # UUID format
 
         # Verify log output
-        captured = capsys.readouterr()
-        assert "설정 저장 중" in captured.out
-        assert "설정이 저장되었습니다" in captured.out
+        assert "설정 저장 중" in caplog.text
+        assert "설정이 저장되었습니다" in caplog.text
 
     def test_save_config_generates_uuid_when_not_provided(self, mock_config_paths):
         """save_config should generate UUID if not provided"""
@@ -300,7 +299,7 @@ class TestConfigManagerUUID:
 class TestConfigManagerEnv:
     """Test environment variable operations"""
 
-    def test_load_credentials_to_env(self, mock_config_paths, capsys):
+    def test_load_credentials_to_env(self, mock_config_paths, caplog):
         """load_credentials_to_env should set environment variables"""
         config_file = mock_config_paths / "config.json"
         config = {
@@ -321,8 +320,7 @@ class TestConfigManagerEnv:
         assert os.environ["COUPANG_VENDOR_ID"] == "env-vendor"
 
         # Verify log output
-        captured = capsys.readouterr()
-        assert "환경 변수로 로드했습니다" in captured.out
+        assert "환경 변수로 로드했습니다" in caplog.text
 
         # Cleanup
         del os.environ["COUPANG_ACCESS_KEY"]

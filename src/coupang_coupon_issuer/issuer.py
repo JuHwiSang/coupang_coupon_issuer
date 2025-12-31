@@ -1,5 +1,6 @@
 """쿠폰 발급 로직 모듈"""
 
+import logging
 import time
 import json
 from datetime import datetime, timedelta
@@ -28,6 +29,7 @@ from .config import (
 )
 from .reader import fetch_coupons_from_excel, DISCOUNT_TYPE_KR_TO_EN, DISCOUNT_TYPE_EN_TO_KR
 
+logger = logging.getLogger(__name__)
 
 # 할인방식 한글-영어 매핑 (reader.py로 이동됨)
 
@@ -72,12 +74,7 @@ class CouponIssuer:
 
         # 계약 ID 가져오기 (자유계약기반)
         self.contract_id = self._fetch_contract_id()
-        print(f"[{self._timestamp()}] 설정 로드 완료 (Vendor: {self.vendor_id}, Contract: {self.contract_id})", flush=True)
-
-    @staticmethod
-    def _timestamp() -> str:
-        """현재 시각 문자열 반환"""
-        return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        logger.info(f"설정 로드 완료 (Vendor: {self.vendor_id}, Contract: {self.contract_id})")
 
     def _fetch_contract_id(self) -> int:
         """
@@ -89,8 +86,7 @@ class CouponIssuer:
         Raises:
             ValueError: 자유계약기반 계약을 찾을 수 없는 경우
         """
-        timestamp = self._timestamp()
-        print(f"[{timestamp}] 계약 목록 조회 중...", flush=True)
+        logger.info("계약 목록 조회 중...")
         
         try:
             response = self.api_client.get_contract_list(self.vendor_id)
@@ -112,16 +108,15 @@ class CouponIssuer:
             contract = non_contract_based[0]
             contract_id = contract.get('contractId')
             
-            print(
-                f"[{timestamp}] 자유계약기반 계약 발견: contractId={contract_id}, "
-                f"기간={contract.get('start')} ~ {contract.get('end')}",
-                flush=True
+            logger.info(
+                f"자유계약기반 계약 발견: contractId={contract_id}, "
+                f"기간={contract.get('start')} ~ {contract.get('end')}"
             )
             
             return contract_id
             
         except Exception as e:
-            print(f"[{timestamp}] ERROR: 계약 조회 실패: {e}", flush=True)
+            logger.error(f"계약 조회 실패: {e}")
             raise
 
     def issue(self) -> None:
@@ -132,8 +127,7 @@ class CouponIssuer:
         2. 각 쿠폰에 대해 Coupang API 호출
         3. 결과를 로그로 출력
         """
-        timestamp = self._timestamp()
-        print(f"[{timestamp}] 쿠폰 발급 작업 시작", flush=True)
+        logger.info("쿠폰 발급 작업 시작")
 
         results = []
 
@@ -142,15 +136,14 @@ class CouponIssuer:
             coupons = self._fetch_coupons_from_excel()
 
             if not coupons:
-                print(f"[{timestamp}] 발급할 쿠폰이 없습니다", flush=True)
+                logger.info("발급할 쿠폰이 없습니다")
                 return
 
             # 1.5. 이전 다운로드쿠폰 파기 (새로운 단계)
             self._expire_previous_download_coupons()
 
             # 2. 각 쿠폰 발급 처리
-            print(f"[{timestamp}] 쿠폰 발급 처리 중: 총 {len(coupons)}개", flush=True)
-
+            logger.info(f"쿠폰 발급 처리 중: 총 {len(coupons)}개")
 
             for idx, coupon in enumerate(coupons, start=1):
                 result = self._issue_single_coupon(idx, coupon)
@@ -160,15 +153,17 @@ class CouponIssuer:
             success_count = sum(1 for r in results if r['status'] == '성공')
             fail_count = len(results) - success_count
 
-            print(f"[{timestamp}] 쿠폰 발급 완료! (성공: {success_count}, 실패: {fail_count})", flush=True)
+            logger.info(f"쿠폰 발급 완료! (성공: {success_count}, 실패: {fail_count})")
 
             # 4. 상세 결과 로깅
             for result in results:
-                status = "OK" if result['status'] == '성공' else "FAIL"
-                print(f"[{timestamp}] [{status}] {result['coupon_name']}: {result['message']}", flush=True)
+                if result['status'] == '성공':
+                    logger.info(f"[OK] {result['coupon_name']}: {result['message']}")
+                else:
+                    logger.error(f"[FAIL] {result['coupon_name']}: {result['message']}")
 
         except Exception as e:
-            print(f"[{timestamp}] ERROR: 쿠폰 발급 중 오류 발생: {e}", flush=True)
+            logger.error(f"쿠폰 발급 중 오류 발생: {e}")
             raise
 
     def _issue_single_coupon(self, index: int, coupon: Dict[str, Any]) -> Dict[str, Any]:
@@ -191,7 +186,6 @@ class CouponIssuer:
         Returns:
             발급 결과 딕셔너리
         """
-        timestamp = self._timestamp()
         coupon_name = coupon.get('name', f'쿠폰{index}')
         coupon_type = coupon.get('type', '').strip()
         validity_days = coupon.get('validity_days', 1)
@@ -210,14 +204,14 @@ class CouponIssuer:
         if not vendor_items:
             raise ValueError(f"옵션ID가 설정되지 않았습니다: {coupon_name}")
 
-        print(f"[{timestamp}] [{index}] {coupon_name} ({coupon_type}) 발급 중...", flush=True)
+        logger.debug(f"[{index}] {coupon_name} ({coupon_type}) 발급 중...")
 
         result = {
             'coupon_name': coupon_name,
             'coupon_type': coupon_type,
             'status': '실패',
             'message': '',
-            'timestamp': timestamp
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         }
 
         try:
@@ -270,12 +264,12 @@ class CouponIssuer:
             else:
                 result['message'] = f"알 수 없는 쿠폰 타입: {coupon_type}"
 
-            print(f"[{timestamp}] [{index}] {result['status']}: {result['message']}", flush=True)
+            logger.debug(f"[{index}] {result['status']}: {result['message']}")
 
         except Exception as e:
             result['status'] = '실패'
             result['message'] = str(e)
-            print(f"[{timestamp}] [{index}] 실패: {e}", flush=True)
+            logger.debug(f"[{index}] 실패: {e}")
 
         return result
 
@@ -434,7 +428,7 @@ class CouponIssuer:
         self._save_download_coupon_record({
             "name": coupon_name,
             "coupon_id": coupon_id,
-            "issued_at": self._timestamp()
+            "issued_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         })
 
         return f"다운로드쿠폰 생성 완료 (couponId: {coupon_id}, 옵션 {len(vendor_items)}개 적용)"
@@ -442,15 +436,14 @@ class CouponIssuer:
 
     def _fetch_coupons_from_excel(self) -> List[Dict[str, Any]]:
         """엑셀 파일에서 쿠폰 정의 읽기 (reader 모듈 사용)"""
-        timestamp = self._timestamp()
-        print(f"[{timestamp}] 엑셀 파일 읽기: {self.excel_file}", flush=True)
+        logger.info(f"엑셀 파일 읽기: {self.excel_file}")
         
         try:
             coupons = fetch_coupons_from_excel(self.excel_file)
-            print(f"[{timestamp}] 쿠폰 {len(coupons)}개 읽기 완료", flush=True)
+            logger.info(f"쿠폰 {len(coupons)}개 읽기 완료")
             return coupons
         except Exception as e:
-            print(f"[{timestamp}] ERROR: 엑셀 파일 읽기 실패: {e}", flush=True)
+            logger.error(f"엑셀 파일 읽기 실패: {e}")
             raise
 
     def _wait_for_done(
@@ -480,7 +473,6 @@ class CouponIssuer:
         Raises:
             AssertionError: FAIL 상태 또는 타임아웃
         """
-        timestamp = self._timestamp()
         
         for attempt in range(max_retries + 1):  # 0부터 max_retries까지 (총 max_retries+1회)
             response = self.api_client.get_instant_coupon_status(self.vendor_id, request_id)
@@ -489,7 +481,7 @@ class CouponIssuer:
             
             if status == 'DONE':
                 if attempt > 0:
-                    print(f"[{timestamp}] {operation_name} 완료 (재시도 {attempt}회)", flush=True)
+                    logger.debug(f"{operation_name} 완료 (재시도 {attempt}회)")
                 return content
             
             elif status == 'FAIL':
@@ -497,7 +489,7 @@ class CouponIssuer:
             
             elif status == 'REQUESTED':
                 if attempt < max_retries:
-                    print(f"[{timestamp}] {operation_name} 대기중... (재시도 {attempt + 1}/{max_retries})", flush=True)
+                    logger.debug(f"{operation_name} 대기중... (재시도 {attempt + 1}/{max_retries})")
                     time.sleep(retry_interval)
                 else:
                     # 최대 재시도 횟수 초과
@@ -522,31 +514,30 @@ class CouponIssuer:
         Note:
             하위 호환성: 파일 없으면 warning 출력하고 빈 리스트 반환
         """
-        timestamp = self._timestamp()
         
         if not self.download_coupons_file.exists():
-            print(f"[{timestamp}] WARNING: 다운로드쿠폰 기록 파일이 없습니다: {self.download_coupons_file}", flush=True)
-            print(f"[{timestamp}] WARNING: 이전 쿠폰 파기를 건너뜁니다 (첫 실행 또는 업그레이드 후)", flush=True)
+            logger.warning(f"다운로드쿠폰 기록 파일이 없습니다: {self.download_coupons_file}")
+            logger.warning("이전 쿠폰 파기를 건너뜁니다 (첫 실행 또는 업그레이드 후)")
             return []
         
         try:
             with open(self.download_coupons_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 coupons = data.get('coupons', [])
-                print(f"[{timestamp}] 다운로드쿠폰 기록 로드 완료: {len(coupons)}개", flush=True)
+                logger.info(f"다운로드쿠폰 기록 로드 완료: {len(coupons)}개")
                 return coupons
         except json.JSONDecodeError as e:
-            print(f"[{timestamp}] ERROR: 다운로드쿠폰 기록 파일 파싱 실패: {e}", flush=True)
-            print(f"[{timestamp}] WARNING: 이전 쿠폰 파기를 건너뜁니다", flush=True)
+            logger.error(f"다운로드쿠폰 기록 파일 파싱 실패: {e}")
+            logger.warning("이전 쿠폰 파기를 건너뜁니다")
             return []
         except Exception as e:
-            print(f"[{timestamp}] ERROR: 다운로드쿠폰 기록 파일 읽기 실패: {e}", flush=True)
-            print(f"[{timestamp}] WARNING: 이전 쿠폰 파기를 건너뜁니다", flush=True)
+            logger.error(f"다운로드쿠폰 기록 파일 읽기 실패: {e}")
+            logger.warning("이전 쿠폰 파기를 건너뜁니다")
             return []
 
     def _save_download_coupon_records(self, records: List[Dict[str, Any]]) -> None:
         """다운로드쿠폰 기록 파일 저장 (JSON 형식)"""
-        timestamp = self._timestamp()
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
         data = {
             "last_updated": timestamp,
@@ -556,9 +547,9 @@ class CouponIssuer:
         try:
             with open(self.download_coupons_file, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
-            print(f"[{timestamp}] 다운로드쿠폰 기록 저장 완료: {len(records)}개", flush=True)
+            logger.info(f"다운로드쿠폰 기록 저장 완료: {len(records)}개")
         except Exception as e:
-            print(f"[{timestamp}] ERROR: 다운로드쿠폰 기록 저장 실패: {e}", flush=True)
+            logger.error(f"다운로드쿠폰 기록 저장 실패: {e}")
             raise
 
     def _save_download_coupon_record(self, record: Dict[str, Any]) -> None:
@@ -579,16 +570,15 @@ class CouponIssuer:
         Note:
             하위 호환성: 기록 파일 없으면 warning만 출력하고 스킵
         """
-        timestamp = self._timestamp()
         
         # 기록 로드
         records = self._load_download_coupon_records()
         
         if not records:
-            print(f"[{timestamp}] 파기할 이전 다운로드쿠폰이 없습니다", flush=True)
+            logger.info("파기할 이전 다운로드쿠폰이 없습니다")
             return
         
-        print(f"[{timestamp}] 이전 다운로드쿠폰 파기 시작 (총 {len(records)}개)", flush=True)
+        logger.info(f"이전 다운로드쿠폰 파기 시작 (총 {len(records)}개)")
         
         # 파기 요청 리스트 생성
         expire_list = []
@@ -602,7 +592,7 @@ class CouponIssuer:
                 })
         
         if not expire_list:
-            print(f"[{timestamp}] WARNING: 유효한 쿠폰 ID가 없습니다", flush=True)
+            logger.warning("유효한 쿠폰 ID가 없습니다")
             return
         
         try:
@@ -619,18 +609,18 @@ class CouponIssuer:
                 
                 if status == 'SUCCESS':
                     success_count += 1
-                    print(f"[{timestamp}] 다운로드쿠폰 파기 완료: couponId={coupon_id}", flush=True)
+                    logger.debug(f"다운로드쿠폰 파기 완료: couponId={coupon_id}")
                 else:
                     fail_count += 1
                     error_msg = result.get('errorMessage', 'Unknown error')
-                    print(f"[{timestamp}] WARNING: 다운로드쿠폰 파기 실패: couponId={coupon_id}, error={error_msg}", flush=True)
+                    logger.warning(f"다운로드쿠폰 파기 실패: couponId={coupon_id}, error={error_msg}")
             
-            print(f"[{timestamp}] 이전 다운로드쿠폰 파기 완료 (성공: {success_count}, 실패: {fail_count})", flush=True)
+            logger.info(f"이전 다운로드쿠폰 파기 완료 (성공: {success_count}, 실패: {fail_count})")
             
             # 기록 파일 초기화 (파기 완료 후)
             self._save_download_coupon_records([])
             
         except Exception as e:
-            print(f"[{timestamp}] ERROR: 다운로드쿠폰 파기 중 오류 발생: {e}", flush=True)
-            print(f"[{timestamp}] WARNING: 이전 쿠폰 파기 실패, 계속 진행합니다", flush=True)
+            logger.error(f"다운로드쿠폰 파기 중 오류 발생: {e}")
+            logger.warning("이전 쿠폰 파기 실패, 계속 진행합니다")
             # 오류 발생 시에도 계속 진행 (하위 호환성)

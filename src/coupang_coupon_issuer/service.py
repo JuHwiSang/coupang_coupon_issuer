@@ -1,5 +1,6 @@
 """Cron 기반 서비스 관리 모듈"""
 
+import logging
 import os
 import sys
 import shutil
@@ -9,6 +10,8 @@ from typing import Optional
 
 from .config import SERVICE_NAME, ConfigManager, get_log_file
 from .utils import is_pyinstaller
+
+logger = logging.getLogger(__name__)
 
 
 class CrontabService:
@@ -60,7 +63,7 @@ class CrontabService:
         - RHEL/CentOS 8+ (dnf)
         - RHEL/CentOS 7 (yum)
         """
-        print("\nCron이 설치되어 있지 않습니다. 설치 중...", flush=True)
+        logger.info("\nCron이 설치되어 있지 않습니다. 설치 중...")
 
         pkg_manager = CrontabService._get_package_manager()
 
@@ -84,12 +87,12 @@ class CrontabService:
             )
 
         for cmd in commands:
-            print(f"실행 중: {cmd}", flush=True)
+            logger.info(f"실행 중: {cmd}")
             ret = os.system(cmd)
             if ret != 0:
                 raise RuntimeError(f"Cron 설치 실패 (종료 코드: {ret})")
 
-        print("Cron 설치 완료", flush=True)
+        logger.info("Cron 설치 완료")
 
     @staticmethod
     def _enable_cron_service() -> None:
@@ -98,7 +101,7 @@ class CrontabService:
 
         systemctl이 있으면 사용, 없으면 service 명령어 사용
         """
-        print("\nCron 서비스 활성화 중...", flush=True)
+        logger.info("\nCron 서비스 활성화 중...")
 
         # systemctl 우선 시도 (대부분의 최신 시스템)
         if shutil.which("systemctl"):
@@ -119,10 +122,10 @@ class CrontabService:
                     ]
 
                     for cmd, desc in commands:
-                        print(f"{desc}...", flush=True)
+                        logger.info(f"{desc}...")
                         ret = os.system(cmd)
                         if ret != 0:
-                            print(f"WARNING: '{cmd}' 실행 중 오류 발생 (코드: {ret})", flush=True)
+                            logger.warning(f"'{cmd}' 실행 중 오류 발생 (코드: {ret})")
 
                     return
 
@@ -130,13 +133,13 @@ class CrontabService:
         elif shutil.which("service"):
             cmd = "service cron start"
             desc = "Cron 서비스 시작"
-            print(f"{desc}...", flush=True)
+            logger.info(f"{desc}...")
             ret = os.system(cmd)
             if ret != 0:
-                print(f"WARNING: '{cmd}' 실행 중 오류 발생 (코드: {ret})", flush=True)
+                logger.warning(f"'{cmd}' 실행 중 오류 발생 (코드: {ret})")
             return
 
-        print("WARNING: 서비스 매니저를 찾을 수 없습니다. Cron이 자동으로 시작되지 않을 수 있습니다.", flush=True)
+        logger.warning("서비스 매니저를 찾을 수 없습니다. Cron이 자동으로 시작되지 않을 수 있습니다.")
 
     @staticmethod
     def _get_current_crontab() -> str:
@@ -182,7 +185,7 @@ class CrontabService:
         if result.returncode != 0:
             raise RuntimeError(f"Crontab 업데이트 실패: {result.stderr}")
 
-        print(f"Cron job이 성공적으로 추가되었습니다", flush=True)
+        logger.info("Cron job이 성공적으로 추가되었습니다")
 
     @staticmethod
     def _remove_crontab_by_uuid(uuid_str: str) -> None:
@@ -196,7 +199,7 @@ class CrontabService:
         marker = f"# coupang_coupon_issuer_job:{uuid_str}"
 
         if marker not in current:
-            print(f"제거할 cron job이 없습니다 (UUID: {uuid_str})", flush=True)
+            logger.info(f"제거할 cron job이 없습니다 (UUID: {uuid_str})")
             return
 
         # UUID 마커가 포함된 라인만 필터링
@@ -216,7 +219,7 @@ class CrontabService:
         if result.returncode != 0:
             raise RuntimeError(f"Crontab 업데이트 실패: {result.stderr}")
 
-        print(f"Cron job이 성공적으로 제거되었습니다 (UUID: {uuid_str})", flush=True)
+        logger.info(f"Cron job이 성공적으로 제거되었습니다 (UUID: {uuid_str})")
 
     @staticmethod
     def setup() -> None:
@@ -228,7 +231,7 @@ class CrontabService:
         2. 미설치 시 자동 설치
         3. Cron 서비스 활성화
         """
-        print(f"\n시스템 준비 중: {SERVICE_NAME}")
+        logger.info(f"\n시스템 준비 중: {SERVICE_NAME}")
 
         # Cron 감지
         cron_system = CrontabService._detect_cron_system()
@@ -237,14 +240,14 @@ class CrontabService:
             # 미설치 시 자동 설치
             CrontabService._install_cron()
         else:
-            print(f"\nCron이 이미 설치되어 있습니다: {cron_system}", flush=True)
+            logger.info(f"\nCron이 이미 설치되어 있습니다: {cron_system}")
 
         # 서비스 활성화
         CrontabService._enable_cron_service()
 
-        print("\n시스템 준비 완료!")
-        print("이제 'install' 명령어로 서비스를 설치하세요.")
-        print("예시: python3 main.py install ~/my-coupons")
+        logger.info("\n시스템 준비 완료!")
+        logger.info("이제 'install' 명령어로 서비스를 설치하세요.")
+        logger.info("예시: python3 main.py install ~/my-coupons")
 
     @staticmethod
     def install(
@@ -271,7 +274,7 @@ class CrontabService:
             vendor_id: 판매자 ID
             jitter_max: 최대 Jitter 시간 (분 단위, None이면 jitter 미사용)
         """
-        print(f"\n서비스 설치 중: {SERVICE_NAME}")
+        logger.info(f"\n서비스 설치 중: {SERVICE_NAME}")
 
         # 1. Cron 설치 확인
         cron_system = CrontabService._detect_cron_system()
@@ -282,30 +285,30 @@ class CrontabService:
                 "  sudo python3 main.py setup"
             )
         else:
-            print(f"\nCron이 감지되었습니다: {cron_system}", flush=True)
+            logger.info(f"\nCron이 감지되었습니다: {cron_system}")
 
         # 2. config.json 로드/생성 (UUID 관리)
         existing_uuid = ConfigManager.get_installation_id(base_dir)
         if existing_uuid:
             # 기존 설치 존재 → 먼저 제거
-            print(f"\n기존 설치 발견 (UUID: {existing_uuid}), 기존 cron job 제거 중...", flush=True)
+            logger.info(f"\n기존 설치 발견 (UUID: {existing_uuid}), 기존 cron job 제거 중...")
             CrontabService._remove_crontab_by_uuid(existing_uuid)
 
         # 새 UUID 생성 및 저장
-        print("\nAPI 키 및 쿠폰 정보 저장 중...", flush=True)
+        logger.info("\nAPI 키 및 쿠폰 정보 저장 중...")
         new_uuid = ConfigManager.save_config(
             base_dir, access_key, secret_key, user_id, vendor_id
         )
 
         # 3. Cron job 추가 (Python 스크립트 경로 + UUID 주석)
-        print("\nCron job 추가 중...", flush=True)
+        logger.info("\nCron job 추가 중...")
 
         # PyInstaller 번들 감지
         if is_pyinstaller():
             # PyInstaller로 빌드된 실행 파일
             executable_path = Path(sys.executable).resolve()
             cron_cmd = f"{executable_path} issue {base_dir.resolve()}"
-            print(f"PyInstaller 실행 파일 감지: {executable_path}", flush=True)
+            logger.info(f"PyInstaller 실행 파일 감지: {executable_path}")
         else:
             # 일반 Python 스크립트
             main_script = Path(__file__).parent.parent.parent / "main.py"
@@ -314,7 +317,7 @@ class CrontabService:
             
             python_exe = sys.executable or "python3"
             cron_cmd = f"{python_exe} {main_script.resolve()} issue {base_dir.resolve()}"
-            print(f"Python 스크립트 모드: {main_script}", flush=True)
+            logger.info(f"Python 스크립트 모드: {main_script}")
 
         log_path = get_log_file(base_dir)
 
@@ -323,7 +326,7 @@ class CrontabService:
         # Jitter 옵션 포함
         if jitter_max is not None and jitter_max > 0:
             cron_cmd += f" --jitter-max {jitter_max}"
-            print(f"Jitter 설정: 최대 {jitter_max}분 랜덤 지연", flush=True)
+            logger.info(f"Jitter 설정: 최대 {jitter_max}분 랜덤 지연")
 
         cron_job = (
             f"0 0 * * * {cron_cmd} >> {log_path} 2>&1  "
@@ -331,20 +334,20 @@ class CrontabService:
         )
         CrontabService._add_cron_job(cron_job)
 
-        print("\n설치 완료!")
+        logger.info("\n설치 완료!")
         if is_pyinstaller():
-            print(f"실행 파일: {Path(sys.executable).resolve()}")
+            logger.info(f"실행 파일: {Path(sys.executable).resolve()}")
         else:
-            print(f"Python 실행: {python_exe}")
-            print(f"스크립트: {main_script}")
-        print(f"작업 디렉토리: {base_dir}")
-        print(f"설정 파일: {base_dir / 'config.json'}")
-        print(f"Cron 스케줄: 매일 00:00{' (Jitter 활성화)' if jitter_max else ''}")
+            logger.info(f"Python 실행: {python_exe}")
+            logger.info(f"스크립트: {main_script}")
+        logger.info(f"작업 디렉토리: {base_dir}")
+        logger.info(f"설정 파일: {base_dir / 'config.json'}")
+        logger.info(f"Cron 스케줄: 매일 00:00{' (Jitter 활성화)' if jitter_max else ''}")
 
         if jitter_max:
-            print(f"  → 실제 실행: 00:00 ~ {jitter_max//60:02d}:{jitter_max%60:02d} 사이")
-        print(f"로그 확인: tail -f {log_path}")
-        print(f"Cron 확인: crontab -l")
+            logger.info(f"  → 실제 실행: 00:00 ~ {jitter_max//60:02d}:{jitter_max%60:02d} 사이")
+        logger.info(f"로그 확인: tail -f {log_path}")
+        logger.info(f"Cron 확인: crontab -l")
 
     @staticmethod
     def uninstall(base_dir: Path) -> None:
@@ -353,20 +356,20 @@ class CrontabService:
         Args:
             base_dir: 작업 디렉토리
         """
-        print(f"서비스 제거 중: {SERVICE_NAME}")
+        logger.info(f"서비스 제거 중: {SERVICE_NAME}")
 
         # config.json에서 UUID 읽기
         installation_id = ConfigManager.get_installation_id(base_dir)
         if not installation_id:
-            print("\nWARNING: config.json에 installation_id가 없습니다", flush=True)
-            print("수동으로 crontab을 확인하세요: crontab -l", flush=True)
+            logger.warning("\nconfig.json에 installation_id가 없습니다")
+            logger.warning("수동으로 crontab을 확인하세요: crontab -l")
             return
 
         # UUID로 crontab 검색/삭제
-        print("\nCron job 제거 중...", flush=True)
+        logger.info("\nCron job 제거 중...")
         CrontabService._remove_crontab_by_uuid(installation_id)
         
-        print("\n설정 파일 제거 중...", flush=True)
+        logger.info("\n설정 파일 제거 중...")
         ConfigManager.remove(base_dir)
 
-        print("\n제거 완료!")
+        logger.info("\n제거 완료!")
